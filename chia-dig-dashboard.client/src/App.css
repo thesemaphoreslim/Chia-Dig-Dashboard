@@ -1,0 +1,14 @@
+﻿#root {
+    max-width: 100%;
+    max-height: stretch;
+    margin: 0 auto;
+    padding: 0;
+    text-align: center;
+    font-size: small;
+}
+
+th, td, table {
+    padding-left: 2rem;
+    padding-right: 2rem;
+    padding: 2rem;
+}
