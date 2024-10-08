@@ -429,6 +429,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                             </table>
                         </section>
                     </div>
+
                 )}
             </section>
         );

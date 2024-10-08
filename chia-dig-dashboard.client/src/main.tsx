@@ -5,6 +5,6 @@ import './index.css'
 
 createRoot(document.getElementById('root')!).render(
     <StrictMode>
-            <StoreList label='XCH Address: ' />
+        <StoreList label='XCH Address: ' />
     </StrictMode>,
 )
