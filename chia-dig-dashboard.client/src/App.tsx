@@ -78,7 +78,7 @@ async function fetchXCH(xchurl: string): Promise<string> {
     return '';
 }
 
-async function fetchStores(): Promise<[string[], boolean, StoreData[]]> {
+async function fetchStores(): Promise<[boolean, StoreData[]]> {
     let hostname = window.location.hostname;
     console.log('trying your hostname - ' + hostname)
     if (hostname == 'localhost') {
@@ -162,30 +162,31 @@ async function fetchStores(): Promise<[string[], boolean, StoreData[]]> {
     } catch (error) {
         console.log('Error in html parser: ' + error);
     }
-    try {
-        let response = await fetch(storeurl + '/.well-known/stores', {
-            method: "GET"
-        }
-        );
-        if (!response.ok) {
-            console.log('your hostname failed');
-            hostname = 'dig.semaphoreslim.net';
-            response = await fetch('https://' + hostname + '/.well-known/stores', {
-                method: "GET"
-            });
-            isSecure = true;
-        }
-        return [await response.json(), isSecure, dict];
-    } catch {
-        console.log('caught error in fetchStores');
-        hostname = 'dig.semaphoreslim.net';
-        const response = await fetch('https://' + hostname + '/.well-known/stores', {
-            method: "GET"
-        }
-        );
-        isSecure = true;
-        return [await response.json(), isSecure, dict];
-    }
+    return [isSecure, dict];
+    //try {
+    //    let response = await fetch(storeurl + '/.well-known/stores', {
+    //        method: "GET"
+    //    }
+    //    );
+    //    if (!response.ok) {
+    //        console.log('your hostname failed');
+    //        hostname = 'dig.semaphoreslim.net';
+    //        response = await fetch('https://' + hostname + '/.well-known/stores', {
+    //            method: "GET"
+    //        });
+    //        isSecure = true;
+    //    }
+    //    return [await response.json(), isSecure, dict];
+    //} catch {
+    //    console.log('caught error in fetchStores');
+    //    hostname = 'dig.semaphoreslim.net';
+    //    const response = await fetch('https://' + hostname + '/.well-known/stores', {
+    //        method: "GET"
+    //    }
+    //    );
+    //    isSecure = true;
+    //    return [await response.json(), isSecure, dict];
+    //}
 }
 
 async function fetchUsers(hint: string): Promise<apiResponse> {
@@ -373,7 +374,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
         async function fetchData() {
             try {
                 setLoading(true);
-                const [data, isSecure, dict] = await fetchStores();
+                const [isSecure, dict] = await fetchStores();
                 //setUsers(data);
                 setUsers(dict);
                 setLoading(false);
