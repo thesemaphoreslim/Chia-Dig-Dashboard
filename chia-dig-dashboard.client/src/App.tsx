@@ -87,13 +87,13 @@ async function fetchStores(): Promise<[string[], boolean]> {
     console.log('My publicIP: ' + publicIP);
     if (publicIP == hostname)
     {
-        storeurl = 'http://' + publicIP + ':4161/.well-known';
+        storeurl = 'http://' + publicIP + ':4161';
         isSecure = false;
         useXCHAddress = true;
     }
     else
     {
-        storeurl = 'https://' + hostname + '/.well-known';
+        storeurl = 'https://' + hostname;
         isSecure = true;
     }
     console.log(storeurl);
@@ -105,11 +105,21 @@ async function fetchStores(): Promise<[string[], boolean]> {
     }
     if (useXCHAddress) {
         console.log('Use the XCH address');
-        myXCH = await fetchXCH(storeurl);
+        myXCH = await fetchXCH(storeurl + "/.well-known");
     }
     console.log('Now we are here')
     try {
-        let response = await fetch(storeurl + '/stores', {
+        const indexresponse = await fetch(storeurl);
+        const indexdata = await indexresponse.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(indexdata, "text/html");
+        const pees = Array.from(doc.querySelectorAll('p'));
+        console.log(pees.map(pee => pee.textContent?.trim()));
+    } catch (error) {
+        console.log('Error in html parser: ' + error);
+    }
+    try {
+        let response = await fetch(storeurl + '/.well-known/stores', {
             method: "GET"
         }
         );
@@ -167,6 +177,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
     const [amLoading, amsetLoading] = useState(false);
     const [lastUpdate, setlastUpdate] = useState(new Date().toLocaleString());
     const [sum, setSum] = useState(0);
+    const [mysum, mysetSum] = useState(0);
     label = 'XCH Address: ';
     const HandleNext = useCallback(() => {
         allStart = allStart + 25;
@@ -240,7 +251,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
             const data = await fetchUsers(hashHex);
             setHint(data.coin_records);
             //myJson = data.coin_records;
-            console.log(data.coin_records);
+            //console.log(data.coin_records);
             //const input = '444947204e6574776f726b207061796f75743a2053746f726520496420633763306263383835623032353331643432633732663131653930626536613232663736616337643436376163626661653736626330326432323231633335322c2045706f636820352c20526f756e6420373239';
             //const output = Buffer.from(input, 'hex');
             //console.log(output.toString());
@@ -284,7 +295,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
 
     useEffect(() => {
         if (Array.isArray(hint)) {
-            const total = hint.reduce((acc, item) => {
+            let total = hint.reduce((acc, item) => {
                 if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
                     return acc + item.coin?.amount;
                 }
@@ -293,9 +304,23 @@ const StoreList: React.FC<Props> = ({ label }) => {
                 }
             }, 0);
             setSum(total * mojo);
+            if (myPuzzleHash) {
+                total = hint.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).reduce((acc, item) => {
+                    if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
+                        return acc + item.coin?.amount;
+                    }
+                    else {
+                        return 0;
+                    }
+                }, 0);
+                mysetSum(total * mojo);
+            } else {
+                mysetSum(0);
+            }
         }
         else {
             setSum(0);
+            mysetSum(0);
         }
     }, [hint]);
 
@@ -304,8 +329,8 @@ const StoreList: React.FC<Props> = ({ label }) => {
             try {
                 setLoading(true);
                 const [data, isSecure] = await fetchStores();
-                setLoading(false);
                 setUsers(data);
+                setLoading(false);
                 setTest(isSecure);
             } catch (error) {
                 console.log(error);
@@ -362,12 +387,12 @@ const StoreList: React.FC<Props> = ({ label }) => {
                     <div>
                     <section>
                         <p>Last Updated: {lastUpdate}</p>
-                        <h2>Total Incentives Paid for this Store: {Array.isArray(hint) ? sum : 0}</h2>
+                        {/*<h2>Total Incentives Paid for this Store: {Array.isArray(hint) ? sum : 0}</h2>*/}
                         <table id="records" border={1} width="100%" align="center">
                             <tbody>
                                 <tr>
                                     <td width="50%">
-                                        <h2 key={myStoreID}>All Payments</h2>
+                                            <h2 key={myStoreID}>All Payments ({Array.isArray(hint) ? sum : 0})</h2>
                                         <table border={1} align="center">
                                             <tbody>
                                                 <tr key='amount'>
@@ -396,7 +421,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                         </table>
                                     </td>
                                     <td width="50%">
-                                        <h2 key={myStoreID}>Your Payments</h2>
+                                            <h2 key={myStoreID}>Your Payments ({Array.isArray(hint) ? mysum : 0})</h2>
                                         <table border={1} align="center">
                                             <tbody>
                                                 <tr key='amount'>
