@@ -49,6 +49,16 @@ interface XCH {
     xch_address: string;
 }
 
+interface StoreData {
+    key: number;
+    data: StoreInfo;
+}
+
+interface StoreInfo {
+    description: string;
+    id: string;
+    contentlength: string;
+}
 async function fetchXCH(xchurl: string): Promise<string> {
     let response: XCH;
     console.log('My xchurl: ' + xchurl);
@@ -68,7 +78,7 @@ async function fetchXCH(xchurl: string): Promise<string> {
     return '';
 }
 
-async function fetchStores(): Promise<[string[], boolean]> {
+async function fetchStores(): Promise<[string[], boolean, StoreData[]]> {
     let hostname = window.location.hostname;
     console.log('trying your hostname - ' + hostname)
     if (hostname == 'localhost') {
@@ -107,14 +117,48 @@ async function fetchStores(): Promise<[string[], boolean]> {
         console.log('Use the XCH address');
         myXCH = await fetchXCH(storeurl + "/.well-known");
     }
-    console.log('Now we are here')
+    //console.log('Now we are here')
+    const dict: StoreData[] = [];
     try {
         const indexresponse = await fetch(storeurl);
         const indexdata = await indexresponse.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(indexdata, "text/html");
         const pees = Array.from(doc.querySelectorAll('p'));
-        console.log(pees.map(pee => pee.textContent?.trim()));
+        let n: number = 1;
+        let id: string = '';
+        let desc: string = '';
+        let length: string = '';
+        if (Array.isArray(pees)) {
+            pees.map(pee => {
+                if (pee.textContent != undefined) {
+                    if (!desc) {
+                        desc = pee.textContent?.trim();
+                    } else if (!id) {
+                        id = pee.textContent?.replace('Store ID:', '').trim();
+                    } else if (!length) {
+                        length = pee.textContent?.trim();
+                    } else {
+                        dict.push({ key: n, data: { description: desc, id: id, contentlength: length } })
+                        desc = pee.textContent?.trim();
+                        id = '';
+                        length = '';
+                        n++;
+                    }
+                } else {
+                    console.log('textContent is undefined')
+                }
+            });
+            if ((pees.length / 3) > dict.length) {
+                dict.push({ key: n, data: { description: desc, id: id, contentlength: length } })
+            }
+        }
+        //for (const testdata of dict) {
+        //    console.log('Key: ' + testdata.key);
+        //    console.log('Description: ' + testdata.data.description);
+        //    console.log('ID: ' + testdata.data.id);
+        //    console.log('Content Length: ' + testdata.data.contentlength);
+        //}
     } catch (error) {
         console.log('Error in html parser: ' + error);
     }
@@ -131,7 +175,7 @@ async function fetchStores(): Promise<[string[], boolean]> {
             });
             isSecure = true;
         }
-        return [await response.json(), isSecure];
+        return [await response.json(), isSecure, dict];
     } catch {
         console.log('caught error in fetchStores');
         hostname = 'dig.semaphoreslim.net';
@@ -140,7 +184,7 @@ async function fetchStores(): Promise<[string[], boolean]> {
         }
         );
         isSecure = true;
-        return [await response.json(), isSecure];
+        return [await response.json(), isSecure, dict];
     }
 }
 
@@ -163,7 +207,8 @@ interface Props {
 }
 
 const StoreList: React.FC<Props> = ({ label }) => {
-    const [users, setUsers] = useState<string[] | null>([]);
+    //const [users, setUsers] = useState<string[] | null>([]);
+    const [users, setUsers] = useState<StoreData[] | null>([]);
     const [test, setTest] = useState<boolean | true>(false);
     const [error, setError] = useState<string | null>(null);
     const [allstart, allsetStart] = useState<number>(0);
@@ -328,8 +373,9 @@ const StoreList: React.FC<Props> = ({ label }) => {
         async function fetchData() {
             try {
                 setLoading(true);
-                const [data, isSecure] = await fetchStores();
-                setUsers(data);
+                const [data, isSecure, dict] = await fetchStores();
+                //setUsers(data);
+                setUsers(dict);
                 setLoading(false);
                 setTest(isSecure);
             } catch (error) {
@@ -366,13 +412,25 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                     <tbody>
                                         <tr>
                                             <td align="center">
+                                                <b>Description</b>
+                                            </td>
+                                            <td align="center">
                                                 <b>Store ID</b>
+                                            </td>
+                                            <td align="center">
+                                                <b>App Size</b>
                                             </td>
                                         </tr>
                                         {users.map((store, i) => (
                                             <tr key={i}>
-                                                <td style={{ padding: '10px' }}>
-                                                    <a onClick={() => HandleClick(store, test, false)} key={store} style={{ cursor: 'pointer' }}>{store}</a>
+                                                <td align="center" style={{ padding: '10px' }}>
+                                                    {store.data.description}
+                                                </td>
+                                                <td align="center" style={{ padding: '10px' }}>
+                                                    <a onClick={() => HandleClick(store.data.id, test, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>
+                                                </td>
+                                                <td align="center" style={{ padding: '10px' }}>
+                                                    {store.data.contentlength}
                                                 </td>
                                             </tr>
                                         ))}
