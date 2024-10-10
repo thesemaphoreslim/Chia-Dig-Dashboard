@@ -4,11 +4,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { publicIpv4 } from 'public-ip';
 import { bech32m } from 'bech32';
 import * as CryptoJS from 'crypto-js';
+import { useSearchParams } from 'react-router-dom';
 
 export let myXCH: string = 'XCH Address';
 export let myPuzzleHash: string = '';
 export const mojo: number = .000000000001;
-export let mySecurity: boolean = false;
 export let myStoreID: string = '';
 // eslint-disable-next-line react-refresh/only-export-components
 export let myInterval: NodeJS.Timeout;
@@ -17,7 +17,8 @@ export let myStart: number = 0;
 export let myEnd: number = 25;
 export let allStart: number = 0;
 export let allEnd: number = 25;
-
+export let initialLoad: boolean = true;
+export let amisecure: boolean = true;
 interface apiResponse {
     coin_records: Records;
 }
@@ -61,7 +62,7 @@ interface StoreInfo {
 }
 async function fetchXCH(xchurl: string): Promise<string> {
     let response: XCH;
-    console.log('My xchurl: ' + xchurl);
+    //console.log('My xchurl: ' + xchurl);
     try {
         response = await fetch(xchurl, {
             method: "GET"
@@ -78,9 +79,9 @@ async function fetchXCH(xchurl: string): Promise<string> {
     return '';
 }
 
-async function fetchStores(): Promise<[boolean, StoreData[]]> {
+async function fetchStores(): Promise<[StoreData[]]> {
     let hostname = window.location.hostname;
-    console.log('trying your hostname - ' + hostname)
+    //console.log('trying your hostname - ' + hostname)
     if (hostname == 'localhost') {
         hostname = 'dig.semaphoreslim.net';
     }
@@ -88,33 +89,31 @@ async function fetchStores(): Promise<[boolean, StoreData[]]> {
         method: "GET"
     }).then(dnsresponse => dnsresponse.json());
     const dnsdata = dnsresponse.Answer;
-    //const dnshostname = dnsdata;
     let useXCHAddress: boolean = false;
-    console.log(JSON.stringify(dnsdata));
+    //console.log(JSON.stringify(dnsdata));
     let storeurl: string = '';
-    let isSecure: boolean = true;
     const publicIP = await publicIpv4();
-    console.log('My publicIP: ' + publicIP);
+    //console.log('My publicIP: ' + publicIP);
     if (publicIP == hostname)
     {
         storeurl = 'http://' + publicIP + ':4161';
-        isSecure = false;
+        amisecure = false;
         useXCHAddress = true;
     }
     else
     {
         storeurl = 'https://' + hostname;
-        isSecure = true;
+        amisecure = true;
     }
-    console.log(storeurl);
+    //console.log(storeurl);
     for (const dnsip of dnsdata) {
-        console.log('My dns ip: ' + dnsip.data)
+        //console.log('My dns ip: ' + dnsip.data)
         if (publicIP == dnsip.data) {
             useXCHAddress = true;
         }
     }
     if (useXCHAddress) {
-        console.log('Use the XCH address');
+        //console.log('Use the XCH address');
         myXCH = await fetchXCH(storeurl + "/.well-known");
     }
     //console.log('Now we are here')
@@ -153,40 +152,10 @@ async function fetchStores(): Promise<[boolean, StoreData[]]> {
                 dict.push({ key: n, data: { description: desc, id: id, contentlength: length } })
             }
         }
-        //for (const testdata of dict) {
-        //    console.log('Key: ' + testdata.key);
-        //    console.log('Description: ' + testdata.data.description);
-        //    console.log('ID: ' + testdata.data.id);
-        //    console.log('Content Length: ' + testdata.data.contentlength);
-        //}
     } catch (error) {
         console.log('Error in html parser: ' + error);
     }
-    return [isSecure, dict];
-    //try {
-    //    let response = await fetch(storeurl + '/.well-known/stores', {
-    //        method: "GET"
-    //    }
-    //    );
-    //    if (!response.ok) {
-    //        console.log('your hostname failed');
-    //        hostname = 'dig.semaphoreslim.net';
-    //        response = await fetch('https://' + hostname + '/.well-known/stores', {
-    //            method: "GET"
-    //        });
-    //        isSecure = true;
-    //    }
-    //    return [await response.json(), isSecure, dict];
-    //} catch {
-    //    console.log('caught error in fetchStores');
-    //    hostname = 'dig.semaphoreslim.net';
-    //    const response = await fetch('https://' + hostname + '/.well-known/stores', {
-    //        method: "GET"
-    //    }
-    //    );
-    //    isSecure = true;
-    //    return [await response.json(), isSecure, dict];
-    //}
+    return [dict];
 }
 
 async function fetchUsers(hint: string): Promise<apiResponse> {
@@ -208,23 +177,18 @@ interface Props {
 }
 
 const StoreList: React.FC<Props> = ({ label }) => {
-    //const [users, setUsers] = useState<string[] | null>([]);
-    const [users, setUsers] = useState<StoreData[] | null>([]);
-    const [test, setTest] = useState<boolean | true>(false);
-    const [error, setError] = useState<string | null>(null);
+    console.log('Rendering');
     const [allstart, allsetStart] = useState<number>(0);
     const [allend, allsetEnd] = useState<number>(25);
     const [mystart, mysetStart] = useState<number>(0);
     const [myend, mysetEnd] = useState<number>(25);
-    const [Loading, setLoading] = useState(true);
     const [value, setValue] = useState('');
-    const [isVisible, setIsVisible] = useState(false);
-    const [hint, setHint] = useState<Records>();
-    const [amLoading, amsetLoading] = useState(false);
-    const [lastUpdate, setlastUpdate] = useState(new Date().toLocaleString());
-    const [sum, setSum] = useState(0);
-    const [mysum, mysetSum] = useState(0);
     label = 'XCH Address: ';
+
+    const [searchParams] = useSearchParams();
+
+    const deepStoreID = searchParams.get('storeid');
+
     const HandleNext = useCallback(() => {
         allStart = allStart + 25;
         allEnd = allEnd + 25;
@@ -263,15 +227,31 @@ const StoreList: React.FC<Props> = ({ label }) => {
         myPuzzleHash = addresstoPuzzleHash(myXCH);
         setValue(event.target.value);
         if (myStoreID) {
-            HandleClick(myStoreID, mySecurity, true);
+            HandleClick(myStoreID, true);
         }
     }
 
-    const HandleClick = useCallback((storeId: string, isSecure: boolean, isTimer: boolean) => {
-        if (!storeId) return;
+    const blankRecords: Records = {};
+
+    const [data, setData] = useState({
+        sum: 0,
+        mysum: 0,
+        users: blankRecords,
+    });
+
+    const HandleClick = useCallback((storeId: string, isTimer: boolean) => {
+        if (!storeId) {
+            return;
+        }
+        if (storeId == myStoreID && !initialLoad) {
+            myStoreID = '';
+            clearInterval(myInterval);
+            console.log('Cleared interval');
+            myIntervalRunning = false;
+            setData({ users: {}, sum: 0, mysum: 0 })
+            return;
+        }
         async function getHint() {
-            console.log({ storeId });
-            if (!isTimer) amsetLoading(true);
             const storearray: Buffer = Buffer.from(storeId, 'hex');
             if (!Buffer.isBuffer(storearray) || storearray.length !== 32) {
                 throw new Error("Invalid input. Must be a 32-byte buffer.");
@@ -281,7 +261,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
 
             let hashHex: string = '';
             try {
-                if (!isSecure) {
+                if (!amisecure) {
                     const test = combinedBuffer.buffer;
                     hashHex = CryptoJS.SHA256(CryptoJS.lib.WordArray.create(test)).toString(CryptoJS.enc.Hex);
                 } else {
@@ -291,67 +271,14 @@ const StoreList: React.FC<Props> = ({ label }) => {
                 }
             }
             catch (err) {
-                setError((err as Error).message);
+                console.log('Error in gethint: ' + (err as Error).message);
             }
 
             const data = await fetchUsers(hashHex);
-            setHint(data.coin_records);
-            //myJson = data.coin_records;
-            //console.log(data.coin_records);
-            //const input = '444947204e6574776f726b207061796f75743a2053746f726520496420633763306263383835623032353331643432633732663131653930626536613232663736616337643436376163626661653736626330326432323231633335322c2045706f636820352c20526f756e6420373239';
-            //const output = Buffer.from(input, 'hex');
-            //console.log(output.toString());
-
-            if (!isTimer) amsetLoading(false);
-            //amsetLoading(false);
-            if (!isTimer) setlastUpdate(new Date().toLocaleString());
-
-        }
-
-        if (!myIntervalRunning) {
-            console.log('Assigned Interval');
-            myInterval = setInterval(() => {
-                if (myStoreID) {
-                    setIsVisible(true);
-                    console.log('Interval met for ' + myStoreID);
-                    console.log(isVisible.toString());
-                    HandleClick(myStoreID, mySecurity, true);
-                    setlastUpdate(new Date().toLocaleString());
-                }
-            }, 300000);
-            myIntervalRunning = true;
-        }
-
-        if (!isVisible || isTimer || myStoreID != storeId) {
-            getHint();
-            setIsVisible(true);
-        }
-        else {
-            console.log('Disabling interval');
-            clearInterval(myInterval);
-            myIntervalRunning = false;
-            setIsVisible(false);
-        }
-        mySecurity = isSecure;
-        myStoreID = storeId;
-
-    }, [isVisible]);
-
-    
-
-    useEffect(() => {
-        if (Array.isArray(hint)) {
-            let total = hint.reduce((acc, item) => {
-                if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
-                    return acc + item.coin?.amount;
-                }
-                else {
-                    return 0;
-                }
-            }, 0);
-            setSum(total * mojo);
-            if (myPuzzleHash) {
-                total = hint.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).reduce((acc, item) => {
+            let tempsum = 0;
+            let tempmysum = 0;
+            if (Array.isArray(data.coin_records)) {
+                let total = data.coin_records.reduce((acc, item) => {
                     if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
                         return acc + item.coin?.amount;
                     }
@@ -359,52 +286,130 @@ const StoreList: React.FC<Props> = ({ label }) => {
                         return 0;
                     }
                 }, 0);
-                mysetSum(total * mojo);
-            } else {
-                mysetSum(0);
+                tempsum = (total * mojo)
+                if (myPuzzleHash) {
+                    total = data.coin_records.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).reduce((acc, item) => {
+                        if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
+                            return acc + item.coin?.amount;
+                        }
+                        else {
+                            return 0;
+                        }
+                    }, 0);
+                    tempmysum = (total * mojo);
+                } else {
+                    tempmysum = 0;
+                }
+                console.log('setData');
+                setData({ users: data.coin_records, sum: tempsum, mysum: tempmysum })
             }
         }
-        else {
-            setSum(0);
-            mysetSum(0);
+
+        if (!myIntervalRunning) {
+            console.log('Assigned Interval');
+            myInterval = setInterval(() => {
+                if (myStoreID) {
+                    console.log('Interval met for ' + myStoreID);
+                    const tempid = myStoreID;
+                    myStoreID = '';
+                    HandleClick(tempid, true);
+                }
+            }, 300000);
+            myIntervalRunning = true;
         }
-    }, [hint]);
+
+        if (isTimer || myStoreID != storeId) {
+            console.log('Running getHint');
+            myStoreID = storeId;
+            getHint();
+        }
+        else {
+            console.log('Disabling interval');
+            clearInterval(myInterval);
+            myIntervalRunning = false;
+            myStoreID = '';
+            //setHint({});
+            setData({ users: {}, sum: 0, mysum: 0 });
+        }
+    }, []);
+
+
+    //useEffect(() => {
+    //    let tempsum = 0;
+    //    let tempmysum = 0;
+    //    if (Array.isArray(hint)) {
+    //        let total = hint.reduce((acc, item) => {
+    //            if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
+    //                return acc + item.coin?.amount;
+    //            }
+    //            else {
+    //                return 0;
+    //            }
+    //        }, 0);
+    //        tempsum = (total * mojo)
+    //        if (myPuzzleHash) {
+    //            total = hint.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).reduce((acc, item) => {
+    //                if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
+    //                    return acc + item.coin?.amount;
+    //                }
+    //                else {
+    //                    return 0;
+    //                }
+    //            }, 0);
+    //            tempmysum = (total * mojo);
+    //        } else {
+    //            tempmysum = 0;
+    //        }
+    //        setData({ sum: tempsum, mysum: tempmysum })
+    //    }
+    //}, [hint]);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const blank: StoreData[] = []
+    const [test, setTest] = useState({
+        loading: false,
+        users: blank,
+    });
 
     useEffect(() => {
         async function fetchData() {
+            const blank: StoreData[] = [];
             try {
-                setLoading(true);
-                const [isSecure, dict] = await fetchStores();
-                //setUsers(data);
-                setUsers(dict);
-                setLoading(false);
-                setTest(isSecure);
+                setTest({ loading: true, users: blank })
+                const [dict] = await fetchStores();
+                setTest({ loading: false, users: dict });
             } catch (error) {
-                console.log(error);
+                console.log('Error in fetchData: ' + error);
             }
         }
         fetchData();
-    }, []);
+      }, []);
 
-    console.log('MyXCH is ' + myXCH);
-
-    if (myXCH != 'XCH Address') {
+    if(myXCH != 'XCH Address') {
         myPuzzleHash = addresstoPuzzleHash(myXCH);
     }
 
-    if (error) {
-        return <div>Error: {error}</div>;
-    }
-    if (Loading) return <p>Loading stores...</p>
-    if (users?.length)
+    //useEffect(() => {
+        if (deepStoreID && initialLoad) {
+            myStoreID = deepStoreID;
+            HandleClick(deepStoreID, true);
+            initialLoad = false;
+        }
+    //}, [HandleClick, deepStoreID]);
+
+    //if (Loading) {
+    if (test.loading) {
+        return <p>Loading stores...</p>
+        //} else if (users?.length) {
+    } else if (test.users?.length) {
         return (
             <section>
-                <br/><br/>
+                <br /><br />
                 <table width="100%">
                     <tbody>
                         <tr>
                             <td align="center">
-                                Enter your DIG Node XCH address in the space provided<br/>then click a store ID to view incentive payouts for the store
+                                Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
                                 <br /><br />
                                 <input type="text" id={label} value={value} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
                             </td>
@@ -422,13 +427,14 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                 <b>App Size</b>
                                             </td>
                                         </tr>
-                                        {users.map((store, i) => (
+                                        {/*{Loading.users.map((store, i) => (*/}
+                                        {test.users.map((store, i) => (
                                             <tr key={i}>
                                                 <td align="center" style={{ padding: '10px' }}>
                                                     {store.data.description}
                                                 </td>
                                                 <td align="center" style={{ padding: '10px' }}>
-                                                    <a onClick={() => HandleClick(store.data.id, test, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>
+                                                    <a onClick={() => HandleClick(store.data.id, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>
                                                 </td>
                                                 <td align="center" style={{ padding: '10px' }}>
                                                     {store.data.contentlength}
@@ -441,75 +447,77 @@ const StoreList: React.FC<Props> = ({ label }) => {
                         </tr>
                     </tbody>
                 </table>
-                {amLoading && (<p>Loading records...</p>)}
-                {isVisible && Array.isArray(hint) && (
+                {/*{amLoading && (<p>Loading records...</p>)}*/}
+                {Array.isArray(data.users) && (
                     <div>
-                    <section>
-                        <p>Last Updated: {lastUpdate}</p>
-                        {/*<h2>Total Incentives Paid for this Store: {Array.isArray(hint) ? sum : 0}</h2>*/}
-                        <table id="records" border={1} width="100%" align="center">
-                            <tbody>
-                                <tr>
-                                    <td width="50%">
-                                            <h2 key={myStoreID}>All Payments ({Array.isArray(hint) ? sum : 0})</h2>
-                                        <table border={1} align="center">
-                                            <tbody>
-                                                <tr key='amount'>
+                        <section>
+                            {/*<p>Last Updated: {lastUpdate}</p>*/}
+                            <p>Last Updated: {new Date().toLocaleString()}</p>
+                            <p>Store ID: {myStoreID}</p>
+                            {/*<h2>Total Incentives Paid for this Store: {Array.isArray(hint) ? sum : 0}</h2>*/}
+                            <table id="records" border={1} width="100%" align="center">
+                                <tbody>
+                                    <tr>
+                                        <td width="50%">
+                                            <h2 key={myStoreID}>All Payments ({Array.isArray(data.users) ? data.sum : 0})</h2>
+                                            <table border={1} align="center">
+                                                <tbody>
+                                                    <tr key='amount'>
                                                         <td style={{ padding: '5px' }}>Amount</td>
                                                         <td style={{ padding: '5px' }}>Address</td>
                                                         <td style={{ padding: '5px' }}>Confirmed at</td>
-                                                </tr>
-                                                {hint.sort((a, b) => b.timestamp - a.timestamp).slice(allstart, allend).map((store, i) => (
-                                                    <tr key={i}>
-                                                        <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
-                                                        <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
-                                                        <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
                                                     </tr>
-                                                ))}
-                                                <tr key='next'>
-                                                    <td>
-                                                        <button onClick={() => HandlePrev()} disabled={allstart <= 0}>Prev</button>
+                                                    {data.users.sort((a, b) => b.timestamp - a.timestamp).slice(allstart, allend).map((store, i) => (
+                                                        <tr key={i}>
+                                                            <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
+                                                            <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
+                                                            <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
+                                                        </tr>
+                                                    ))}
+                                                    <tr key='next'>
+                                                        <td>
+                                                            <button onClick={() => HandlePrev()} disabled={allstart <= 0}>Prev</button>
                                                         </td>
                                                         <td>
                                                         </td>
-                                                    <td>
-                                                        <button onClick={() => HandleNext()} disabled={hint.length <= allend}>Next</button>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </td>
-                                    <td width="50%">
-                                            <h2 key={myStoreID}>Your Payments ({Array.isArray(hint) ? mysum : 0})</h2>
-                                        <table border={1} align="center">
-                                            <tbody>
-                                                <tr key='amount'>
+                                                        <td>
+                                                            <button onClick={() => HandleNext()} disabled={data.users.length <= allend}>Next</button>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                        <td width="50%">
+                                            <h2 key={myStoreID}>Your Payments ({Array.isArray(data.users) ? data.mysum : 0})</h2>
+                                            <table border={1} align="center">
+                                                <tbody>
+                                                    <tr key='amount'>
                                                         <td style={{ padding: '5px' }}>Amount</td>
                                                         <td style={{ padding: '5px' }}>Address</td>
                                                         <td style={{ padding: '5px' }}>Confirmed at</td>
-                                                </tr>
-                                                {myPuzzleHash && hint.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).sort((a, b) => b.timestamp - a.timestamp).slice(mystart, myend).map((store, i) => (
-                                                    <tr key={i}>
-                                                        <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
-                                                        <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
-                                                        <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
                                                     </tr>
-                                                ))}
-                                                <tr key='next'>
-                                                    <td>
-                                                        <button onClick={() => YourHandlePrev()} disabled={mystart <= 0}>Prev</button>
+                                                    {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).sort((a, b) => b.timestamp - a.timestamp).slice(mystart, myend).map((store, i) => (
+                                                        <tr key={i}>
+                                                            <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
+                                                            <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
+                                                            <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
+                                                        </tr>
+                                                    ))}
+                                                    <tr key='next'>
+                                                        <td>
+                                                            <button onClick={() => YourHandlePrev()} disabled={mystart <= 0}>Prev</button>
                                                         </td>
                                                         <td>
                                                         </td>
-                                                    <td>
-                                                        <button onClick={() => YourHandleNext()} disabled={hint.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).length <= myend}>Next</button>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </tbody>
+                                                        <td>
+                                                            <button onClick={() => YourHandleNext()} disabled={data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).length <= myend}>Next</button>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </tbody>
                             </table>
                         </section>
                     </div>
@@ -517,6 +525,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                 )}
             </section>
         );
+    }
 }
 
 function puzzleHashToAddress(puzzleHash: string): string {
