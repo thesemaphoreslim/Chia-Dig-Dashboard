@@ -6,19 +6,26 @@ import { bech32m } from 'bech32';
 import * as CryptoJS from 'crypto-js';
 import { useSearchParams } from 'react-router-dom';
 
-export let myXCH: string = 'XCH Address';
-export let myPuzzleHash: string = '';
-export const mojo: number = .000000000001;
-export let myStoreID: string = '';
+let myXCH: string = 'XCH Address';
+let myPuzzleHash: string = '';
+const mojo: number = .000000000001;
+let myStoreID: string = '';
 // eslint-disable-next-line react-refresh/only-export-components
-export let myInterval: NodeJS.Timeout;
-export let myIntervalRunning: boolean = false;
-export let myStart: number = 0;
-export let myEnd: number = 25;
-export let allStart: number = 0;
-export let allEnd: number = 25;
-export let initialLoad: boolean = true;
-export let amisecure: boolean = true;
+let myInterval: NodeJS.Timeout;
+let myIntervalRunning: boolean = false;
+let myStart: number = 0;
+let myEnd: number = 10;
+let allStart: number = 0;
+let allEnd: number = 10;
+let initialLoad: boolean = true;
+let amisecure: boolean = true;
+const genesisEpoch = Date.UTC(2024, 8, 3, 0, 0);
+let startepoch: number = 0;
+let endepoch: number = 0;
+let epochSelection: string = 'All';
+let myrecordSelection: number = 10;
+let allrecordSelection: number = 10;
+const recordoptions: number[] = [10, 25, 50, 100];
 interface apiResponse {
     coin_records: Records;
 }
@@ -62,38 +69,61 @@ interface StoreInfo {
 }
 async function fetchXCH(xchurl: string): Promise<string> {
     let response: XCH;
-    //console.log('My xchurl: ' + xchurl);
+    let fetcherror: boolean = false;
+    console.log('My xchurl: ' + xchurl);
     try {
         response = await fetch(xchurl, {
             method: "GET"
         }
         ).then(response => response.json());
         return response.xch_address;
-    } catch {
-        console.log('caught error in fetchXCH')
-        response = await fetch('https://dig.semaphoreslim.net/.well-known', {
-            method: "GET"
-        }
-        ).then(response => response.json());
+    } catch (error) {
+        console.log('caught error in fetchXCH: ' + error)
+        fetcherror = true;
     }
-    return '';
+    if (fetcherror) {
+        try {
+            response = await fetch('https://dig.semaphoreslim.net/.well-known', {
+                //response = await fetch('http://104.178.133.11:4161/.well-known', {
+                method: "GET"
+            }
+            ).then(response => response.json());
+            return response.xch_address;
+        } catch (error) {
+            console.log('caught 2nd error in fetchXCH: ' + error);
+            return 'XCH Address';
+        }
+    }
+    return 'XCH Address';
 }
 
 async function fetchStores(): Promise<[StoreData[]]> {
     let hostname = window.location.hostname;
-    //console.log('trying your hostname - ' + hostname)
+
     if (hostname == 'localhost') {
         hostname = 'dig.semaphoreslim.net';
     }
+
     const dnsresponse: myDNS = await fetch('https://dns.google/resolve?name=' + hostname, {
         method: "GET"
     }).then(dnsresponse => dnsresponse.json());
+
     const dnsdata = dnsresponse.Answer;
     let useXCHAddress: boolean = false;
-    //console.log(JSON.stringify(dnsdata));
     let storeurl: string = '';
     const publicIP = await publicIpv4();
-    //console.log('My publicIP: ' + publicIP);
+
+    if (Array.isArray(dnsdata)) {
+        for (const dnsip of dnsdata) {
+            if (publicIP == dnsip.data) {
+                useXCHAddress = true;
+            }
+        }
+    } else {
+        console.log('No DNS records found for your hostname')
+        hostname = publicIP;
+    }
+
     if (publicIP == hostname)
     {
         storeurl = 'http://' + publicIP + ':4161';
@@ -105,18 +135,10 @@ async function fetchStores(): Promise<[StoreData[]]> {
         storeurl = 'https://' + hostname;
         amisecure = true;
     }
-    //console.log(storeurl);
-    for (const dnsip of dnsdata) {
-        //console.log('My dns ip: ' + dnsip.data)
-        if (publicIP == dnsip.data) {
-            useXCHAddress = true;
-        }
-    }
+
     if (useXCHAddress) {
-        //console.log('Use the XCH address');
         myXCH = await fetchXCH(storeurl + "/.well-known");
     }
-    //console.log('Now we are here')
     const dict: StoreData[] = [];
     try {
         const indexresponse = await fetch(storeurl);
@@ -176,12 +198,74 @@ interface Props {
     label: string;
 }
 
+//function calculateEpochAndRound(): { epoch: number; round: number; } {
+//    const firstEpochStart = new Date(Date.UTC(2024, 8, 3, 0, 0));
+
+//    const currentTimestampMillis = new Date().getTime();
+
+//    // Calculate the number of milliseconds in one epoch (7 days)
+//    const millisecondsInEpoch = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+
+//    // Calculate the difference in milliseconds between the current timestamp and the first epoch start
+//    const differenceMillis = currentTimestampMillis - firstEpochStart.getTime();
+
+//    // Calculate the current epoch number
+//    const epochNumber = Math.floor(differenceMillis / millisecondsInEpoch) + 1;
+
+//    // Calculate the milliseconds elapsed since the start of the current epoch
+//    const elapsedMillisInCurrentEpoch = differenceMillis % millisecondsInEpoch;
+
+//    // Calculate the number of milliseconds in a round (10 minutes)
+//    const millisecondsInRound = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+//    // Calculate the current round number
+//    const roundNumber = Math.floor(elapsedMillisInCurrentEpoch / millisecondsInRound) + 1;
+
+//    return { epoch: epochNumber, round: roundNumber };
+//}
+
+
+function setEpochStartandEnd(epoch: string) {
+    // Calculate the number of milliseconds in one epoch (7 days)
+    const millisecondsInEpoch = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+    if (epoch == 'All') {
+        startepoch = (genesisEpoch / 1000);
+        endepoch = (new Date().getTime() / 1000);
+    } else {
+        startepoch = ((genesisEpoch + (millisecondsInEpoch * (Number(epoch.trim()) -1 ))) / 1000);
+        endepoch = ((genesisEpoch + ((millisecondsInEpoch - 1) * Number(epoch.trim()))) / 1000);
+    }
+}
+
 const StoreList: React.FC<Props> = ({ label }) => {
+    const currentTimestampMillis = new Date().getTime();
     console.log('Rendering');
-    const [allstart, allsetStart] = useState<number>(0);
-    const [allend, allsetEnd] = useState<number>(25);
-    const [mystart, mysetStart] = useState<number>(0);
-    const [myend, mysetEnd] = useState<number>(25);
+    setEpochStartandEnd(epochSelection);
+    //console.log('Current epoch and round - ' + calculateEpochAndRound().epoch + ' - ' + calculateEpochAndRound().round + ' - ' + (currentTimestampMillis / 1000));
+
+    const firstEpochStart = new Date(Date.UTC(2024, 8, 3, 0, 0));
+
+    // Calculate the number of milliseconds in one epoch (7 days)
+    const millisecondsInEpoch = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+
+    // Calculate the difference in milliseconds between the current timestamp and the first epoch start
+    let differenceMillis = currentTimestampMillis - firstEpochStart.getTime();
+    let n: number = 1
+    const epochs: number[] = [];
+    const strepochs: string[] = [];
+    if (differenceMillis > millisecondsInEpoch) {
+        epochs.push(n);
+    }
+    do {
+        differenceMillis = differenceMillis - millisecondsInEpoch;
+        n++;
+        epochs.push(n);
+    } while (differenceMillis > millisecondsInEpoch)
+    strepochs.push('All');
+    for (const epoch of epochs.sort((a, b) => b - a)) {
+        strepochs.push(epoch.toString());
+    }
+
     const [value, setValue] = useState('');
     label = 'XCH Address: ';
 
@@ -190,95 +274,152 @@ const StoreList: React.FC<Props> = ({ label }) => {
     const deepStoreID = searchParams.get('storeid');
 
     const HandleNext = useCallback(() => {
-        allStart = allStart + 25;
-        allEnd = allEnd + 25;
-        allsetStart(allStart);
-        allsetEnd(allEnd);
-        console.log('Adding records');
+        allStart = allStart + allrecordSelection;
+        allEnd = allEnd + allrecordSelection;
+        setData((prevstate) => ({ ...prevstate, loading: false }));
     }, []);
 
     const HandlePrev = useCallback(() => {
-        allStart = allStart - 25;
-        allEnd = allEnd - 25;
-        allsetStart(allStart);
-        allsetEnd(allEnd);
-        console.log('Removing records');
+        if (myrecordSelection > allStart) {
+            allStart = 0;
+            allEnd = myrecordSelection
+        } else {
+            allStart = allStart - myrecordSelection;
+            allEnd = allEnd - myrecordSelection;
+        }
+        setData((prevstate) => ({ ...prevstate, loading: false }));
     }, []);
 
     const YourHandleNext = useCallback(() => {
-        myStart = myStart + 25;
-        myEnd = myEnd + 25;
-        mysetStart(myStart);
-        mysetEnd(myEnd);
-        console.log('Adding records');
+        myStart = myStart + myrecordSelection;
+        myEnd = myEnd + myrecordSelection;
+        setData((prevstate) => ({ ...prevstate, loading: false }));
     }, []);
 
     const YourHandlePrev = useCallback(() => {
-        myStart = myStart - 25;
-        myEnd = myEnd - 25;
-        mysetStart(myStart);
-        mysetEnd(myEnd);
-        console.log('Removing records');
+        if (myrecordSelection > myStart) {
+            myStart = 0;
+            myEnd = myrecordSelection
+        } else {
+            myStart = myStart - myrecordSelection;
+            myEnd = myEnd - myrecordSelection;
+        }
+        setData((prevstate) => ({ ...prevstate, loading: false }));
     }, []);
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        console.log('We are in handleChange');
         myXCH = event.target.value;
         myPuzzleHash = addresstoPuzzleHash(myXCH);
         setValue(event.target.value);
         if (myStoreID) {
-            HandleClick(myStoreID, true);
+            HandleClick(myStoreID, true, false);
         }
     }
 
-    const blankRecords: Records = {};
+    const handleEpochChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedValue = event.target.value;
+        if (epochSelection == selectedValue) {
+            return;
+        }
+        epochSelection = selectedValue;
+        setData((prevstate) => ({ ...prevstate, loading: true }));
+        setEpochStartandEnd(epochSelection);
+        if (myStoreID) {
+            HandleClick(myStoreID, true, true);
+        }
+    }
 
+    const handleAllRecordChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedValue = Number(event.target.value);
+        if (allrecordSelection == selectedValue) {
+            return;
+        }
+        let recorddiff = 0;
+        if (allrecordSelection > selectedValue) {
+            recorddiff = allrecordSelection - selectedValue;
+            allEnd = allEnd - recorddiff;
+        } else {
+            recorddiff = selectedValue - allrecordSelection;
+            allEnd = allEnd + recorddiff;
+        }
+        allrecordSelection = selectedValue;
+        setData((prevstate) => ({ ...prevstate, loading: false }));
+    }
+
+    const handleMyRecordChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedValue = Number(event.target.value);
+        if (myrecordSelection == selectedValue) {
+            return;
+        }
+        let recorddiff = 0;
+        if (myrecordSelection > selectedValue) {
+            recorddiff = myrecordSelection - selectedValue;
+            myEnd = myEnd - recorddiff;
+        } else {
+            recorddiff = selectedValue - myrecordSelection;
+            myEnd = myEnd + recorddiff;
+        }
+        myrecordSelection = selectedValue;
+        setData((prevstate) => ({ ...prevstate, loading: false }));
+    }
+
+    const blankRecords: Records = {};
+    
     const [data, setData] = useState({
         sum: 0,
         mysum: 0,
         users: blankRecords,
+        loading: false,
     });
 
-    const HandleClick = useCallback((storeId: string, isTimer: boolean) => {
+    const HandleClick = useCallback((storeId: string, isTimer: boolean, sumsonly: boolean) => {
         if (!storeId) {
             return;
         }
-        if (storeId == myStoreID && !initialLoad) {
+        if (storeId == myStoreID && !initialLoad && !sumsonly) {
             myStoreID = '';
             clearInterval(myInterval);
             console.log('Cleared interval');
             myIntervalRunning = false;
-            setData({ users: {}, sum: 0, mysum: 0 })
+            setData({ users: {}, sum: 0, mysum: 0, loading: false })
             return;
         }
         async function getHint() {
-            const storearray: Buffer = Buffer.from(storeId, 'hex');
-            if (!Buffer.isBuffer(storearray) || storearray.length !== 32) {
-                throw new Error("Invalid input. Must be a 32-byte buffer.");
+            if (!isTimer && !sumsonly) {
+                setData({ users: {}, sum: 0, mysum: 0, loading: true });
             }
-            const seed = "digpayment";
-            const combinedBuffer = Buffer.concat([Buffer.from(seed), storearray]);
-
-            let hashHex: string = '';
-            try {
-                if (!amisecure) {
-                    const test = combinedBuffer.buffer;
-                    hashHex = CryptoJS.SHA256(CryptoJS.lib.WordArray.create(test)).toString(CryptoJS.enc.Hex);
-                } else {
-                    const hashBuffer = await window.crypto.subtle.digest('SHA-256', combinedBuffer);
-                    const hashArray = Array.from(new Uint8Array(hashBuffer));
-                    hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            const blankResponse: apiResponse = {} as apiResponse;
+            let mydata: apiResponse = blankResponse;
+            if (!sumsonly) {
+                const storearray: Buffer = Buffer.from(storeId, 'hex');
+                if (!Buffer.isBuffer(storearray) || storearray.length !== 32) {
+                    throw new Error("Invalid input. Must be a 32-byte buffer.");
                 }
-            }
-            catch (err) {
-                console.log('Error in gethint: ' + (err as Error).message);
-            }
+                const seed = "digpayment";
+                const combinedBuffer = Buffer.concat([Buffer.from(seed), storearray]);
 
-            const data = await fetchUsers(hashHex);
+                let hashHex: string = '';
+                try {
+                    if (!amisecure) {
+                        const test = combinedBuffer.buffer;
+                        hashHex = CryptoJS.SHA256(CryptoJS.lib.WordArray.create(test)).toString(CryptoJS.enc.Hex);
+                    } else {
+                        const hashBuffer = await window.crypto.subtle.digest('SHA-256', combinedBuffer);
+                        const hashArray = Array.from(new Uint8Array(hashBuffer));
+                        hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                    }
+                }
+                catch (err) {
+                    console.log('Error in gethint: ' + (err as Error).message);
+                }
+                mydata = await fetchUsers(hashHex);
+            } else {
+                mydata.coin_records = data.users;
+            }
             let tempsum = 0;
             let tempmysum = 0;
-            if (Array.isArray(data.coin_records)) {
-                let total = data.coin_records.reduce((acc, item) => {
+            if (Array.isArray(mydata.coin_records)) {
+                let total = mydata.coin_records.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).reduce((acc, item) => {
                     if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
                         return acc + item.coin?.amount;
                     }
@@ -288,7 +429,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                 }, 0);
                 tempsum = (total * mojo)
                 if (myPuzzleHash) {
-                    total = data.coin_records.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).reduce((acc, item) => {
+                    total = mydata.coin_records.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash && addy.timestamp >= startepoch && addy.timestamp <= endepoch).reduce((acc, item) => {
                         if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
                             return acc + item.coin?.amount;
                         }
@@ -300,8 +441,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                 } else {
                     tempmysum = 0;
                 }
-                console.log('setData');
-                setData({ users: data.coin_records, sum: tempsum, mysum: tempmysum })
+                setData({ users: mydata.coin_records, sum: tempsum, mysum: tempmysum, loading: false })
             }
         }
 
@@ -312,13 +452,13 @@ const StoreList: React.FC<Props> = ({ label }) => {
                     console.log('Interval met for ' + myStoreID);
                     const tempid = myStoreID;
                     myStoreID = '';
-                    HandleClick(tempid, true);
+                    HandleClick(tempid, true, false);
                 }
             }, 300000);
             myIntervalRunning = true;
         }
 
-        if (isTimer || myStoreID != storeId) {
+        if (isTimer || myStoreID != storeId || sumsonly) {
             console.log('Running getHint');
             myStoreID = storeId;
             getHint();
@@ -329,40 +469,10 @@ const StoreList: React.FC<Props> = ({ label }) => {
             myIntervalRunning = false;
             myStoreID = '';
             //setHint({});
-            setData({ users: {}, sum: 0, mysum: 0 });
+            setData({ users: {}, sum: 0, mysum: 0, loading: false });
         }
-    }, []);
+    }, [data.users]);
 
-
-    //useEffect(() => {
-    //    let tempsum = 0;
-    //    let tempmysum = 0;
-    //    if (Array.isArray(hint)) {
-    //        let total = hint.reduce((acc, item) => {
-    //            if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
-    //                return acc + item.coin?.amount;
-    //            }
-    //            else {
-    //                return 0;
-    //            }
-    //        }, 0);
-    //        tempsum = (total * mojo)
-    //        if (myPuzzleHash) {
-    //            total = hint.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).reduce((acc, item) => {
-    //                if (typeof item.coin?.amount == 'number' && !isNaN(item.coin?.amount)) {
-    //                    return acc + item.coin?.amount;
-    //                }
-    //                else {
-    //                    return 0;
-    //                }
-    //            }, 0);
-    //            tempmysum = (total * mojo);
-    //        } else {
-    //            tempmysum = 0;
-    //        }
-    //        setData({ sum: tempsum, mysum: tempmysum })
-    //    }
-    //}, [hint]);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const blank: StoreData[] = []
@@ -383,24 +493,21 @@ const StoreList: React.FC<Props> = ({ label }) => {
             }
         }
         fetchData();
-      }, []);
+    }, []);
 
     if(myXCH != 'XCH Address') {
         myPuzzleHash = addresstoPuzzleHash(myXCH);
     }
 
-    //useEffect(() => {
-        if (deepStoreID && initialLoad) {
-            myStoreID = deepStoreID;
-            HandleClick(deepStoreID, true);
-            initialLoad = false;
-        }
-    //}, [HandleClick, deepStoreID]);
+    if (deepStoreID && initialLoad) {
+        myStoreID = deepStoreID;
+        setData((prevstate) => ({ ...prevstate, loading: true }));
+        HandleClick(deepStoreID, true, false);
+        initialLoad = false;
+    }
 
-    //if (Loading) {
     if (test.loading) {
         return <p>Loading stores...</p>
-        //} else if (users?.length) {
     } else if (test.users?.length) {
         return (
             <section>
@@ -427,14 +534,13 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                 <b>App Size</b>
                                             </td>
                                         </tr>
-                                        {/*{Loading.users.map((store, i) => (*/}
                                         {test.users.map((store, i) => (
                                             <tr key={i}>
                                                 <td align="center" style={{ padding: '10px' }}>
                                                     {store.data.description}
                                                 </td>
                                                 <td align="center" style={{ padding: '10px' }}>
-                                                    <a onClick={() => HandleClick(store.data.id, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>
+                                                    <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>
                                                 </td>
                                                 <td align="center" style={{ padding: '10px' }}>
                                                     {store.data.contentlength}
@@ -447,14 +553,40 @@ const StoreList: React.FC<Props> = ({ label }) => {
                         </tr>
                     </tbody>
                 </table>
-                {/*{amLoading && (<p>Loading records...</p>)}*/}
-                {Array.isArray(data.users) && (
+                {Array.isArray(data.users) && !data.loading ? (
                     <div>
                         <section>
-                            {/*<p>Last Updated: {lastUpdate}</p>*/}
-                            <p>Last Updated: {new Date().toLocaleString()}</p>
-                            <p>Store ID: {myStoreID}</p>
-                            {/*<h2>Total Incentives Paid for this Store: {Array.isArray(hint) ? sum : 0}</h2>*/}
+                            <br />
+                            <table align="center" width="100%">
+                                <tbody>
+                                    <tr>
+                                        <td align="center">
+                                            <p>Last Updated: {new Date().toLocaleString()}</p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td align="center">
+                                            <p><b>Store ID: {myStoreID}</b></p>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <table align="right" width="100%">
+                                <tbody>
+                                    <tr>
+                                        <td align="right">
+                                            Selected Epoch(s):&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                            <select onChange={handleEpochChange}>
+                                                {strepochs.map((epoch) => (
+                                                    <option key={epoch} value={epoch}>
+                                                        {epoch}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                             <table id="records" border={1} width="100%" align="center">
                                 <tbody>
                                     <tr>
@@ -467,7 +599,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                         <td style={{ padding: '5px' }}>Address</td>
                                                         <td style={{ padding: '5px' }}>Confirmed at</td>
                                                     </tr>
-                                                    {data.users.sort((a, b) => b.timestamp - a.timestamp).slice(allstart, allend).map((store, i) => (
+                                                    {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
                                                         <tr key={i}>
                                                             <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
                                                             <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
@@ -476,12 +608,19 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                     ))}
                                                     <tr key='next'>
                                                         <td>
-                                                            <button onClick={() => HandlePrev()} disabled={allstart <= 0}>Prev</button>
+                                                            <button onClick={() => HandlePrev()} disabled={allStart <= 0}>Prev</button>
                                                         </td>
                                                         <td>
+                                                            <select onChange={handleAllRecordChange}>
+                                                                {recordoptions.map((records) => (
+                                                                    <option key={records} value={records}>
+                                                                        {records}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
                                                         </td>
                                                         <td>
-                                                            <button onClick={() => HandleNext()} disabled={data.users.length <= allend}>Next</button>
+                                                            <button onClick={() => HandleNext()} disabled={data.users.length <= allEnd}>Next</button>
                                                         </td>
                                                     </tr>
                                                 </tbody>
@@ -496,7 +635,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                         <td style={{ padding: '5px' }}>Address</td>
                                                         <td style={{ padding: '5px' }}>Confirmed at</td>
                                                     </tr>
-                                                    {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).sort((a, b) => b.timestamp - a.timestamp).slice(mystart, myend).map((store, i) => (
+                                                    {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash && addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(myStart, myEnd).map((store, i) => (
                                                         <tr key={i}>
                                                             <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
                                                             <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
@@ -505,12 +644,19 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                     ))}
                                                     <tr key='next'>
                                                         <td>
-                                                            <button onClick={() => YourHandlePrev()} disabled={mystart <= 0}>Prev</button>
+                                                            <button onClick={() => YourHandlePrev()} disabled={myStart <= 0}>Prev</button>
                                                         </td>
                                                         <td>
+                                                            <select onChange={handleMyRecordChange}>
+                                                                {recordoptions.map((records) => (
+                                                                    <option key={records} value={records}>
+                                                                        {records}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
                                                         </td>
                                                         <td>
-                                                            <button onClick={() => YourHandleNext()} disabled={data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).length <= myend}>Next</button>
+                                                            <button onClick={() => YourHandleNext()} disabled={data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).length <= myEnd}>Next</button>
                                                         </td>
                                                     </tr>
                                                 </tbody>
@@ -522,7 +668,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                         </section>
                     </div>
 
-                )}
+                ) : data.loading && (<p>Loading records...</p>) }
             </section>
         );
     }
