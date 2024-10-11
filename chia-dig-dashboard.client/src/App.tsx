@@ -6,6 +6,7 @@ import { publicIpv4 } from 'public-ip';
 import { bech32m } from 'bech32';
 import * as CryptoJS from 'crypto-js';
 import { useSearchParams } from 'react-router-dom';
+import { CopyToClipboard } from 'react-copy-to-clipboard';
 
 let myXCH: string = 'XCH Address';
 let myPuzzleHash: string = '';
@@ -535,18 +536,22 @@ const StoreList: React.FC<Props> = ({ label }) => {
         return (
             <div>
                 {isMobile ? (
-                    <div className="truncate-text">
+                    <div>
                         <br />
-                        <table width="100%">
+                        <table align="center" width="100%">
                             <tbody>
                                 <tr>
                                     <td align="center">
                                         Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
                                         <br /><br />
-                                        <input type="text" id={label} value={value} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
+                                        <input type="text" id={label} value={value} placeholder={myXCH} onChange={handleChange} style={{ width: '100%' }} />
                                     </td>
                                 </tr>
-                                <tr><td><br/></td></tr>
+                                <tr>
+                                    <td>
+                                        <br />
+                                    </td>
+                                </tr>
                                 <tr>
                                     <td align="center">
                                         <table border={1} align="center">
@@ -568,9 +573,10 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                             {truncForMobile(store.data.description, 25)}
                                                         </td>
                                                         <td align="center" style={{ padding: '5px' }}>
-                                                            {/*<a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>*/}
-                                                            {/*<a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{(store.data.id.length > mobilemaxlength ? store.data.id.toString().substring(0, mobilemaxlength) + '...' : store.data.id)}</a>*/}
-                                                            <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{truncForMobile(store.data.id, 5)}</a>
+                                                            <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{truncForMobile(store.data.id, 5)}</a>&nbsp;&nbsp;
+                                                            <CopyToClipboard text={store.data.id}>
+                                                                <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a>
+                                                            </CopyToClipboard>
                                                         </td>
                                                         <td align="center" style={{ padding: '5px' }}>
                                                             {truncForMobile(store.data.contentlength, 10)}
@@ -621,44 +627,8 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                     <table id="records" border={1} width="100%" align="center">
                                         <tbody>
                                             <tr>
-                                                <td width="50%">
-                                                    <h2 key={myStoreID}>All Payments<br/>({Array.isArray(data.users) ? data.sum : 0})</h2>
-                                                    <table border={1} align="center">
-                                                        <tbody>
-                                                            <tr key='amount'>
-                                                                <td style={{ padding: '5px' }}>Amount</td>
-                                                                <td style={{ padding: '5px' }}>Address</td>
-                                                                <td style={{ padding: '5px' }}>Confirmed at</td>
-                                                            </tr>
-                                                            {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
-                                                                <tr key={i}>
-                                                                    <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
-                                                                    <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash),5)}</a></td>
-                                                                    <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
-                                                                </tr>
-                                                            ))}
-                                                            <tr key='next'>
-                                                                <td>
-                                                                    <button onClick={() => HandlePrev()} disabled={allStart <= 0}>Prev</button>
-                                                                </td>
-                                                                <td>
-                                                                    <select onChange={handleAllRecordChange}>
-                                                                        {recordoptions.map((records) => (
-                                                                            <option key={records} value={records}>
-                                                                                {records}
-                                                                            </option>
-                                                                        ))}
-                                                                    </select>
-                                                                </td>
-                                                                <td>
-                                                                    <button onClick={() => HandleNext()} disabled={data.users.length <= allEnd}>Next</button>
-                                                                </td>
-                                                            </tr>
-                                                        </tbody>
-                                                    </table>
-                                                </td>
-                                                <td width="50%">
-                                                    <h2 key={myStoreID}>Your Payments<br/>({Array.isArray(data.users) ? data.mysum : 0})</h2>
+                                                <td width="100%">
+                                                    <h2 key={myStoreID}>Your Payments<br />({Array.isArray(data.users) ? data.mysum : 0})</h2>
                                                     <table border={1} align="center">
                                                         <tbody>
                                                             <tr key='amount'>
@@ -669,7 +639,11 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                             {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash && addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(myStart, myEnd).map((store, i) => (
                                                                 <tr key={i}>
                                                                     <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
-                                                                    <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash),5)}</a></td>
+                                                                    <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash), 5)}</a>&nbsp;&nbsp;
+                                                                        <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
+                                                                            <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a>
+                                                                        </CopyToClipboard>
+                                                                    </td>
                                                                     <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
                                                                 </tr>
                                                             ))}
@@ -694,12 +668,53 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                     </table>
                                                 </td>
                                             </tr>
+                                            <tr>
+                                                <td width="100%">
+                                                    <h2 key={myStoreID}>All Payments<br/>({Array.isArray(data.users) ? data.sum : 0})</h2>
+                                                    <table border={1} align="center">
+                                                        <tbody>
+                                                            <tr key='amount'>
+                                                                <td style={{ padding: '5px' }}>Amount</td>
+                                                                <td style={{ padding: '5px' }}>Address</td>
+                                                                <td style={{ padding: '5px' }}>Confirmed at</td>
+                                                            </tr>
+                                                            {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
+                                                                <tr key={i}>
+                                                                    <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
+                                                                    <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash), 5)}</a>&nbsp;&nbsp;
+                                                                        <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
+                                                                            <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a>
+                                                                        </CopyToClipboard>
+                                                                    </td>
+                                                                    <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
+                                                                </tr>
+                                                            ))}
+                                                            <tr key='next'>
+                                                                <td>
+                                                                    <button onClick={() => HandlePrev()} disabled={allStart <= 0}>Prev</button>
+                                                                </td>
+                                                                <td>
+                                                                    <select onChange={handleAllRecordChange}>
+                                                                        {recordoptions.map((records) => (
+                                                                            <option key={records} value={records}>
+                                                                                {records}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </td>
+                                                                <td>
+                                                                    <button onClick={() => HandleNext()} disabled={data.users.length <= allEnd}>Next</button>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </td>
+                                            </tr>
                                         </tbody>
                                     </table>
                                 </section>
                             </div>
                         ) : data.loading && (<p>Loading records...</p>)}
-
                     </div>
                 ) : (
                 <div>
@@ -732,7 +747,10 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                         {store.data.description}
                                                     </td>
                                                     <td align="center" style={{ padding: '10px' }}>
-                                                        <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>
+                                                        <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>&nbsp;&nbsp;
+                                                        <CopyToClipboard text={store.data.id}>
+                                                            <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a>
+                                                        </CopyToClipboard>
                                                     </td>
                                                     <td align="center" style={{ padding: '10px' }}>
                                                         {store.data.contentlength}
@@ -794,7 +812,11 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                         {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
                                                             <tr key={i}>
                                                                 <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
-                                                                <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
+                                                                <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a>&nbsp;&nbsp;
+                                                                    <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
+                                                                        <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a> 
+                                                                    </CopyToClipboard>
+                                                                </td>
                                                                 <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
                                                             </tr>
                                                         ))}
