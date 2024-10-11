@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer';
 import './App.css';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useMediaQuery } from 'react-responsive'
 import { publicIpv4 } from 'public-ip';
 import { bech32m } from 'bech32';
 import * as CryptoJS from 'crypto-js';
@@ -25,7 +26,8 @@ let endepoch: number = 0;
 let epochSelection: string = 'All';
 let myrecordSelection: number = 10;
 let allrecordSelection: number = 10;
-const recordoptions: number[] = [10, 25, 50, 100];
+//const mobilemaxlength: number = 20;
+let recordoptions: number[] = [10, 25, 50, 100];
 interface apiResponse {
     coin_records: Records;
 }
@@ -84,7 +86,6 @@ async function fetchXCH(xchurl: string): Promise<string> {
     if (fetcherror) {
         try {
             response = await fetch('https://dig.semaphoreslim.net/.well-known', {
-                //response = await fetch('http://104.178.133.11:4161/.well-known', {
                 method: "GET"
             }
             ).then(response => response.json());
@@ -224,7 +225,6 @@ interface Props {
 //    return { epoch: epochNumber, round: roundNumber };
 //}
 
-
 function setEpochStartandEnd(epoch: string) {
     // Calculate the number of milliseconds in one epoch (7 days)
     const millisecondsInEpoch = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
@@ -238,10 +238,11 @@ function setEpochStartandEnd(epoch: string) {
 }
 
 const StoreList: React.FC<Props> = ({ label }) => {
+    const isMobile = useMediaQuery({ query: '(max-width: 768px)' });
+
     const currentTimestampMillis = new Date().getTime();
     console.log('Rendering');
     setEpochStartandEnd(epochSelection);
-    //console.log('Current epoch and round - ' + calculateEpochAndRound().epoch + ' - ' + calculateEpochAndRound().round + ' - ' + (currentTimestampMillis / 1000));
 
     const firstEpochStart = new Date(Date.UTC(2024, 8, 3, 0, 0));
 
@@ -499,6 +500,14 @@ const StoreList: React.FC<Props> = ({ label }) => {
         myPuzzleHash = addresstoPuzzleHash(myXCH);
     }
 
+    if (isMobile && initialLoad) {
+        recordoptions = [5, 10, 25, 50, 100];
+        myrecordSelection = 5;
+        allrecordSelection = 5;
+        myEnd = 5;
+        allEnd = 5;
+    }
+
     if (deepStoreID && initialLoad) {
         myStoreID = deepStoreID;
         setData((prevstate) => ({ ...prevstate, loading: true }));
@@ -506,170 +515,354 @@ const StoreList: React.FC<Props> = ({ label }) => {
         initialLoad = false;
     }
 
+    function truncForMobile(str: string, maxsize: number) {
+        if (str.length > maxsize) {
+            if (str.length > (maxsize * 2)) {
+                return (str.substring(0, maxsize) + '...' + str.substring(str.length - maxsize));
+            } else {
+                return (str.substring(0, maxsize)) + '...';
+            }
+        } else {
+            return str;
+        }
+    }
+
+    initialLoad = false;
+
     if (test.loading) {
         return <p>Loading stores...</p>
     } else if (test.users?.length) {
         return (
-            <section>
-                <br /><br />
-                <table width="100%">
-                    <tbody>
-                        <tr>
-                            <td align="center">
-                                Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
-                                <br /><br />
-                                <input type="text" id={label} value={value} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
-                            </td>
-                            <td align="center">
-                                <table border={1} align="center">
+            <div>
+                {isMobile ? (
+                    <div className="truncate-text">
+                        <br />
+                        <table width="100%">
+                            <tbody>
+                                <tr>
+                                    <td align="center">
+                                        Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
+                                        <br /><br />
+                                        <input type="text" id={label} value={value} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
+                                    </td>
+                                </tr>
+                                <tr><td><br/></td></tr>
+                                <tr>
+                                    <td align="center">
+                                        <table border={1} align="center">
+                                            <tbody>
+                                                <tr>
+                                                    <td align="center" style={{ padding: '5px' }}>
+                                                        <b>Description</b>
+                                                    </td>
+                                                    <td align="center" style={{ padding: '5px' }}>
+                                                        <b>Store ID</b>
+                                                    </td>
+                                                    <td align="center" style={{ padding: '5px' }}>
+                                                        <b>App Size</b>
+                                                    </td>
+                                                </tr>
+                                                {test.users.map((store, i) => (
+                                                    <tr key={i}>
+                                                        <td align="center" style={{ padding: '5px' }}>
+                                                            {truncForMobile(store.data.description, 25)}
+                                                        </td>
+                                                        <td align="center" style={{ padding: '5px' }}>
+                                                            {/*<a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>*/}
+                                                            {/*<a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{(store.data.id.length > mobilemaxlength ? store.data.id.toString().substring(0, mobilemaxlength) + '...' : store.data.id)}</a>*/}
+                                                            <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{truncForMobile(store.data.id, 5)}</a>
+                                                        </td>
+                                                        <td align="center" style={{ padding: '5px' }}>
+                                                            {truncForMobile(store.data.contentlength, 10)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        {Array.isArray(data.users) && !data.loading ? (
+                            <div>
+                            <br/>
+                                <section>
+                                    <table align="center" width="100%">
+                                        <tbody>
+                                            <tr>
+                                                <td align="center">
+                                                    Last Updated: {new Date().toLocaleString()}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td align="center">
+                                                    <b>Store ID: {truncForMobile(myStoreID, 5)}</b>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <table align="right" width="100%">
+                                        <tbody>
+                                            <tr>
+                                                <td align="right">
+                                                    Selected Epoch(s):&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                                    <select onChange={handleEpochChange}>
+                                                        {strepochs.map((epoch) => (
+                                                            <option key={epoch} value={epoch}>
+                                                                {epoch}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <table id="records" border={1} width="100%" align="center">
+                                        <tbody>
+                                            <tr>
+                                                <td width="50%">
+                                                    <h2 key={myStoreID}>All Payments<br/>({Array.isArray(data.users) ? data.sum : 0})</h2>
+                                                    <table border={1} align="center">
+                                                        <tbody>
+                                                            <tr key='amount'>
+                                                                <td style={{ padding: '5px' }}>Amount</td>
+                                                                <td style={{ padding: '5px' }}>Address</td>
+                                                                <td style={{ padding: '5px' }}>Confirmed at</td>
+                                                            </tr>
+                                                            {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
+                                                                <tr key={i}>
+                                                                    <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
+                                                                    <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash),5)}</a></td>
+                                                                    <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
+                                                                </tr>
+                                                            ))}
+                                                            <tr key='next'>
+                                                                <td>
+                                                                    <button onClick={() => HandlePrev()} disabled={allStart <= 0}>Prev</button>
+                                                                </td>
+                                                                <td>
+                                                                    <select onChange={handleAllRecordChange}>
+                                                                        {recordoptions.map((records) => (
+                                                                            <option key={records} value={records}>
+                                                                                {records}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </td>
+                                                                <td>
+                                                                    <button onClick={() => HandleNext()} disabled={data.users.length <= allEnd}>Next</button>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </td>
+                                                <td width="50%">
+                                                    <h2 key={myStoreID}>Your Payments<br/>({Array.isArray(data.users) ? data.mysum : 0})</h2>
+                                                    <table border={1} align="center">
+                                                        <tbody>
+                                                            <tr key='amount'>
+                                                                <td style={{ padding: '5px' }}>Amount</td>
+                                                                <td style={{ padding: '5px' }}>Address</td>
+                                                                <td style={{ padding: '5px' }}>Confirmed at</td>
+                                                            </tr>
+                                                            {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash && addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(myStart, myEnd).map((store, i) => (
+                                                                <tr key={i}>
+                                                                    <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
+                                                                    <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash),5)}</a></td>
+                                                                    <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
+                                                                </tr>
+                                                            ))}
+                                                            <tr key='next'>
+                                                                <td>
+                                                                    <button onClick={() => YourHandlePrev()} disabled={myStart <= 0}>Prev</button>
+                                                                </td>
+                                                                <td>
+                                                                    <select onChange={handleMyRecordChange}>
+                                                                        {recordoptions.map((records) => (
+                                                                            <option key={records} value={records}>
+                                                                                {records}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </td>
+                                                                <td>
+                                                                    <button onClick={() => YourHandleNext()} disabled={data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).length <= myEnd}>Next</button>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </section>
+                            </div>
+                        ) : data.loading && (<p>Loading records...</p>)}
+
+                    </div>
+                ) : (
+                <div>
+                    <br /><br />
+                    <table width="100%">
+                        <tbody>
+                            <tr>
+                                <td align="center">
+                                    Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
+                                    <br /><br />
+                                    <input type="text" id={label} value={value} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
+                                </td>
+                                <td align="center">
+                                    <table border={1} align="center">
+                                        <tbody>
+                                            <tr>
+                                                <td align="center">
+                                                    <b>Description</b>
+                                                </td>
+                                                <td align="center">
+                                                    <b>Store ID</b>
+                                                </td>
+                                                <td align="center">
+                                                    <b>App Size</b>
+                                                </td>
+                                            </tr>
+                                            {test.users.map((store, i) => (
+                                                <tr key={i}>
+                                                    <td align="center" style={{ padding: '10px' }}>
+                                                        {store.data.description}
+                                                    </td>
+                                                    <td align="center" style={{ padding: '10px' }}>
+                                                        <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>
+                                                    </td>
+                                                    <td align="center" style={{ padding: '10px' }}>
+                                                        {store.data.contentlength}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {Array.isArray(data.users) && !data.loading ? (
+                        <div>
+                            <section>
+                                <br />
+                                <table align="center" width="100%">
                                     <tbody>
                                         <tr>
                                             <td align="center">
-                                                <b>Description</b>
-                                            </td>
-                                            <td align="center">
-                                                <b>Store ID</b>
-                                            </td>
-                                            <td align="center">
-                                                <b>App Size</b>
+                                                <p>Last Updated: {new Date().toLocaleString()}</p>
                                             </td>
                                         </tr>
-                                        {test.users.map((store, i) => (
-                                            <tr key={i}>
-                                                <td align="center" style={{ padding: '10px' }}>
-                                                    {store.data.description}
-                                                </td>
-                                                <td align="center" style={{ padding: '10px' }}>
-                                                    <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>
-                                                </td>
-                                                <td align="center" style={{ padding: '10px' }}>
-                                                    {store.data.contentlength}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        <tr>
+                                            <td align="center">
+                                                <p><b>Store ID: {myStoreID}</b></p>
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                {Array.isArray(data.users) && !data.loading ? (
-                    <div>
-                        <section>
-                            <br />
-                            <table align="center" width="100%">
-                                <tbody>
-                                    <tr>
-                                        <td align="center">
-                                            <p>Last Updated: {new Date().toLocaleString()}</p>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td align="center">
-                                            <p><b>Store ID: {myStoreID}</b></p>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <table align="right" width="100%">
-                                <tbody>
-                                    <tr>
-                                        <td align="right">
-                                            Selected Epoch(s):&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                                            <select onChange={handleEpochChange}>
-                                                {strepochs.map((epoch) => (
-                                                    <option key={epoch} value={epoch}>
-                                                        {epoch}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <table id="records" border={1} width="100%" align="center">
-                                <tbody>
-                                    <tr>
-                                        <td width="50%">
-                                            <h2 key={myStoreID}>All Payments ({Array.isArray(data.users) ? data.sum : 0})</h2>
-                                            <table border={1} align="center">
-                                                <tbody>
-                                                    <tr key='amount'>
-                                                        <td style={{ padding: '5px' }}>Amount</td>
-                                                        <td style={{ padding: '5px' }}>Address</td>
-                                                        <td style={{ padding: '5px' }}>Confirmed at</td>
-                                                    </tr>
-                                                    {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
-                                                        <tr key={i}>
-                                                            <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
-                                                            <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
-                                                            <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
-                                                        </tr>
+                                <table align="right" width="100%">
+                                    <tbody>
+                                        <tr>
+                                            <td align="right">
+                                                Selected Epoch(s):&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                                <select onChange={handleEpochChange}>
+                                                    {strepochs.map((epoch) => (
+                                                        <option key={epoch} value={epoch}>
+                                                            {epoch}
+                                                        </option>
                                                     ))}
-                                                    <tr key='next'>
-                                                        <td>
-                                                            <button onClick={() => HandlePrev()} disabled={allStart <= 0}>Prev</button>
-                                                        </td>
-                                                        <td>
-                                                            <select onChange={handleAllRecordChange}>
-                                                                {recordoptions.map((records) => (
-                                                                    <option key={records} value={records}>
-                                                                        {records}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        </td>
-                                                        <td>
-                                                            <button onClick={() => HandleNext()} disabled={data.users.length <= allEnd}>Next</button>
-                                                        </td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </td>
-                                        <td width="50%">
-                                            <h2 key={myStoreID}>Your Payments ({Array.isArray(data.users) ? data.mysum : 0})</h2>
-                                            <table border={1} align="center">
-                                                <tbody>
-                                                    <tr key='amount'>
-                                                        <td style={{ padding: '5px' }}>Amount</td>
-                                                        <td style={{ padding: '5px' }}>Address</td>
-                                                        <td style={{ padding: '5px' }}>Confirmed at</td>
-                                                    </tr>
-                                                    {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash && addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(myStart, myEnd).map((store, i) => (
-                                                        <tr key={i}>
-                                                            <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
-                                                            <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
-                                                            <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <table id="records" border={1} width="100%" align="center">
+                                    <tbody>
+                                        <tr>
+                                            <td width="50%">
+                                                <h2 key={myStoreID}>All Payments ({Array.isArray(data.users) ? data.sum : 0})</h2>
+                                                <table border={1} align="center">
+                                                    <tbody>
+                                                        <tr key='amount'>
+                                                            <td style={{ padding: '5px' }}>Amount</td>
+                                                            <td style={{ padding: '5px' }}>Address</td>
+                                                            <td style={{ padding: '5px' }}>Confirmed at</td>
                                                         </tr>
-                                                    ))}
-                                                    <tr key='next'>
-                                                        <td>
-                                                            <button onClick={() => YourHandlePrev()} disabled={myStart <= 0}>Prev</button>
-                                                        </td>
-                                                        <td>
-                                                            <select onChange={handleMyRecordChange}>
-                                                                {recordoptions.map((records) => (
-                                                                    <option key={records} value={records}>
-                                                                        {records}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        </td>
-                                                        <td>
-                                                            <button onClick={() => YourHandleNext()} disabled={data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).length <= myEnd}>Next</button>
-                                                        </td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </section>
-                    </div>
-
-                ) : data.loading && (<p>Loading records...</p>) }
-            </section>
+                                                        {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
+                                                            <tr key={i}>
+                                                                <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
+                                                                <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
+                                                                <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
+                                                            </tr>
+                                                        ))}
+                                                        <tr key='next'>
+                                                            <td>
+                                                                <button onClick={() => HandlePrev()} disabled={allStart <= 0}>Prev</button>
+                                                            </td>
+                                                            <td>
+                                                                <select onChange={handleAllRecordChange}>
+                                                                    {recordoptions.map((records) => (
+                                                                        <option key={records} value={records}>
+                                                                            {records}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </td>
+                                                            <td>
+                                                                <button onClick={() => HandleNext()} disabled={data.users.length <= allEnd}>Next</button>
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </td>
+                                            <td width="50%">
+                                                <h2 key={myStoreID}>Your Payments ({Array.isArray(data.users) ? data.mysum : 0})</h2>
+                                                <table border={1} align="center">
+                                                    <tbody>
+                                                        <tr key='amount'>
+                                                            <td style={{ padding: '5px' }}>Amount</td>
+                                                            <td style={{ padding: '5px' }}>Address</td>
+                                                            <td style={{ padding: '5px' }}>Confirmed at</td>
+                                                        </tr>
+                                                        {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash && addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(myStart, myEnd).map((store, i) => (
+                                                            <tr key={i}>
+                                                                <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
+                                                                <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
+                                                                <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
+                                                            </tr>
+                                                        ))}
+                                                        <tr key='next'>
+                                                            <td>
+                                                                <button onClick={() => YourHandlePrev()} disabled={myStart <= 0}>Prev</button>
+                                                            </td>
+                                                            <td>
+                                                                <select onChange={handleMyRecordChange}>
+                                                                    {recordoptions.map((records) => (
+                                                                        <option key={records} value={records}>
+                                                                            {records}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </td>
+                                                            <td>
+                                                                <button onClick={() => YourHandleNext()} disabled={data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash).length <= myEnd}>Next</button>
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </section>
+                        </div>
+                    ) : data.loading && (<p>Loading records...</p>)}
+                </div>
+                )}
+            </div>
         );
     }
 }

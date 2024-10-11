@@ -12,3 +12,10 @@ th, td, table {
     padding-right: 2rem;
     padding: 2rem;
 }
+
+.truncate-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre-wrap;
+    max-width: 100%; /* Adjust as needed */
+}
