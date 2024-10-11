@@ -7,6 +7,7 @@ import { bech32m } from 'bech32';
 import * as CryptoJS from 'crypto-js';
 import { useSearchParams } from 'react-router-dom';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
+import imgUrl from '/images/clipboard.png'
 
 let myXCH: string = 'XCH Address';
 let myPuzzleHash: string = '';
@@ -196,9 +197,9 @@ async function fetchUsers(hint: string): Promise<apiResponse> {
     return data;
 }
 
-interface Props {
-    label: string;
-}
+//interface Props {
+//    label: string;
+//}
 
 //function calculateEpochAndRound(): { epoch: number; round: number; } {
 //    const firstEpochStart = new Date(Date.UTC(2024, 8, 3, 0, 0));
@@ -238,7 +239,7 @@ function setEpochStartandEnd(epoch: string) {
     }
 }
 
-const StoreList: React.FC<Props> = ({ label }) => {
+const StoreList: React.FC = () => {
     const isMobile = useMediaQuery({ query: '(max-width: 768px)' });
 
     const currentTimestampMillis = new Date().getTime();
@@ -268,8 +269,8 @@ const StoreList: React.FC<Props> = ({ label }) => {
         strepochs.push(epoch.toString());
     }
 
-    const [value, setValue] = useState('');
-    label = 'XCH Address: ';
+    //const [value, setValue] = useState('');
+    //label = 'XCH Address: ';
 
     const [searchParams] = useSearchParams();
 
@@ -310,11 +311,17 @@ const StoreList: React.FC<Props> = ({ label }) => {
     }, []);
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        myXCH = event.target.value;
-        myPuzzleHash = addresstoPuzzleHash(myXCH);
-        setValue(event.target.value);
-        if (myStoreID) {
-            HandleClick(myStoreID, true, false);
+        if (event.target.value == '') {
+            myXCH = '';
+            myPuzzleHash = '';
+        } else {
+            myXCH = event.target.value;
+            myPuzzleHash = addresstoPuzzleHash(myXCH);
+        }
+        if (myStoreID.length > 0) {
+            HandleClick(myStoreID, false, false, true);
+        } else {
+            setData((prevstate) => ({ ...prevstate, loading: false }));
         }
     }
 
@@ -324,10 +331,10 @@ const StoreList: React.FC<Props> = ({ label }) => {
             return;
         }
         epochSelection = selectedValue;
-        setData((prevstate) => ({ ...prevstate, loading: true }));
         setEpochStartandEnd(epochSelection);
-        if (myStoreID) {
-            HandleClick(myStoreID, true, true);
+        if (myStoreID.length > 0) {
+            setData((prevstate) => ({ ...prevstate, loading: true }));
+            HandleClick(myStoreID, true, true, false);
         }
     }
 
@@ -374,11 +381,11 @@ const StoreList: React.FC<Props> = ({ label }) => {
         loading: false,
     });
 
-    const HandleClick = useCallback((storeId: string, isTimer: boolean, sumsonly: boolean) => {
+    const HandleClick = useCallback((storeId: string, isTimer: boolean, sumsonly: boolean, forceupdate: boolean) => {
         if (!storeId) {
             return;
         }
-        if (storeId == myStoreID && !initialLoad && !sumsonly) {
+        if (storeId == myStoreID && !initialLoad && !sumsonly && !forceupdate) {
             myStoreID = '';
             clearInterval(myInterval);
             console.log('Cleared interval');
@@ -392,7 +399,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
             }
             const blankResponse: apiResponse = {} as apiResponse;
             let mydata: apiResponse = blankResponse;
-            if (!sumsonly) {
+            if (!sumsonly && !forceupdate) {
                 const storearray: Buffer = Buffer.from(storeId, 'hex');
                 if (!Buffer.isBuffer(storearray) || storearray.length !== 32) {
                     throw new Error("Invalid input. Must be a 32-byte buffer.");
@@ -454,13 +461,13 @@ const StoreList: React.FC<Props> = ({ label }) => {
                     console.log('Interval met for ' + myStoreID);
                     const tempid = myStoreID;
                     myStoreID = '';
-                    HandleClick(tempid, true, false);
+                    HandleClick(tempid, true, false, false);
                 }
             }, 300000);
             myIntervalRunning = true;
         }
 
-        if (isTimer || myStoreID != storeId || sumsonly) {
+        if (isTimer || myStoreID != storeId || sumsonly || forceupdate) {
             console.log('Running getHint');
             myStoreID = storeId;
             getHint();
@@ -497,7 +504,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
         fetchData();
     }, []);
 
-    if(myXCH != 'XCH Address') {
+    if (myXCH != 'XCH Address' && myXCH.length > 0) {
         myPuzzleHash = addresstoPuzzleHash(myXCH);
     }
 
@@ -512,7 +519,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
     if (deepStoreID && initialLoad) {
         myStoreID = deepStoreID;
         setData((prevstate) => ({ ...prevstate, loading: true }));
-        HandleClick(deepStoreID, true, false);
+        HandleClick(deepStoreID, true, false, false);
         initialLoad = false;
     }
 
@@ -544,7 +551,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                     <td align="center">
                                         Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
                                         <br /><br />
-                                        <input type="text" id={label} value={value} placeholder={myXCH} onChange={handleChange} style={{ width: '100%' }} />
+                                        <input type="text" id='XCH_Address' value={(myXCH == 'XCH Address' || '' ? '' : myXCH)} placeholder={myXCH} onChange={handleChange} style={{ width: '100%' }} />
                                     </td>
                                 </tr>
                                 <tr>
@@ -573,9 +580,9 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                             {truncForMobile(store.data.description, 25)}
                                                         </td>
                                                         <td align="center" style={{ padding: '5px' }}>
-                                                            <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{truncForMobile(store.data.id, 5)}</a>&nbsp;&nbsp;
+                                                            <a onClick={() => HandleClick(store.data.id, false, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{truncForMobile(store.data.id, 5)}</a>&nbsp;&nbsp;
                                                             <CopyToClipboard text={store.data.id}>
-                                                                <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a>
+                                                                <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src={imgUrl} /></a>
                                                             </CopyToClipboard>
                                                         </td>
                                                         <td align="center" style={{ padding: '5px' }}>
@@ -641,7 +648,9 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                                     <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
                                                                     <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash), 5)}</a>&nbsp;&nbsp;
                                                                         <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
-                                                                            <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a>
+                                                                            <a style={{ cursor: 'pointer' }} >
+                                                                                <img width="15" height="15" src={imgUrl} />
+                                                                            </a>
                                                                         </CopyToClipboard>
                                                                     </td>
                                                                     <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
@@ -683,7 +692,9 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                                     <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
                                                                     <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash), 5)}</a>&nbsp;&nbsp;
                                                                         <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
-                                                                            <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a>
+                                                                            <a style={{ cursor: 'pointer' }} >
+                                                                                <img width="15" height="15" src={imgUrl} />
+                                                                            </a>
                                                                         </CopyToClipboard>
                                                                     </td>
                                                                     <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
@@ -725,7 +736,7 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                 <td align="center">
                                     Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
                                     <br /><br />
-                                    <input type="text" id={label} value={value} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
+                                    <input type="text" id='XCH_Address' value={(myXCH == 'XCH Address' ? '' : myXCH)} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
                                 </td>
                                 <td align="center">
                                     <table border={1} align="center">
@@ -747,9 +758,11 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                         {store.data.description}
                                                     </td>
                                                     <td align="center" style={{ padding: '10px' }}>
-                                                        <a onClick={() => HandleClick(store.data.id, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>&nbsp;&nbsp;
+                                                        <a onClick={() => HandleClick(store.data.id, false, false, false)} key={store.data.id} style={{ cursor: 'pointer' }}>{store.data.id}</a>&nbsp;&nbsp;
                                                         <CopyToClipboard text={store.data.id}>
-                                                            <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a>
+                                                            <a style={{ cursor: 'pointer' }} >
+                                                                <img width="15" height="15" src={imgUrl} />
+                                                            </a>
                                                         </CopyToClipboard>
                                                     </td>
                                                     <td align="center" style={{ padding: '10px' }}>
@@ -814,7 +827,9 @@ const StoreList: React.FC<Props> = ({ label }) => {
                                                                 <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
                                                                 <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a>&nbsp;&nbsp;
                                                                     <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
-                                                                        <a style={{ cursor: 'pointer' }} ><img width="15" height="15" src="images/clipboard1.png" alt="dig node image" /></a> 
+                                                                        <a style={{ cursor: 'pointer' }} >
+                                                                            <img width="15" height="15" src={imgUrl} />
+                                                                        </a> 
                                                                     </CopyToClipboard>
                                                                 </td>
                                                                 <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
