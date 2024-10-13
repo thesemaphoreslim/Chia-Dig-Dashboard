@@ -13,7 +13,7 @@ let myXCH: string = 'XCH Address';
 let myPuzzleHash: string = '';
 const mojo: number = .000000000001;
 let myStoreID: string = '';
-// eslint-disable-next-line react-refresh/only-export-components
+
 let myInterval: NodeJS.Timeout;
 let myIntervalRunning: boolean = false;
 let myStart: number = 0;
@@ -477,13 +477,11 @@ const StoreList: React.FC = () => {
             clearInterval(myInterval);
             myIntervalRunning = false;
             myStoreID = '';
-            //setHint({});
             setData({ users: {}, sum: 0, mysum: 0, loading: false });
         }
     }, [data.users]);
 
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const blank: StoreData[] = []
     const [test, setTest] = useState({
         loading: false,

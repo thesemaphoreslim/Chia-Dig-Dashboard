@@ -31,12 +31,14 @@ body {
     padding: 0;
     place-items: normal;
     max-width: 100%;
+    font-size: small;
 }
 
 th, td, table {
     padding-left: 0;
     padding: 0;
     padding-right: 0;
+    font-size: small;
 }
 
 h1 {
