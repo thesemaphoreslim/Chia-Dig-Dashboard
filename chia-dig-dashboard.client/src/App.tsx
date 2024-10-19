@@ -30,6 +30,8 @@ let myrecordSelection: number = 10;
 let allrecordSelection: number = 10;
 //const mobilemaxlength: number = 20;
 let recordoptions: number[] = [10, 25, 50, 100];
+let storeurl: string = '';
+let myBalance: string = 'NA';
 interface apiResponse {
     coin_records: Records;
 }
@@ -57,6 +59,11 @@ interface myDNS {
     }[];
 }
 
+interface Balance {
+    xch: string;
+    mojo: string;
+}
+
 interface XCH {
     xch_address: string;
 }
@@ -70,6 +77,20 @@ interface StoreInfo {
     description: string;
     id: string;
     contentlength: string;
+}
+
+async function fetchXCHBalance(): Promise<string> {
+    let response: Balance = {} as Balance;
+    try {
+        response = await fetch('https://xchscan.com/api/account/balance?address=' + myXCH, {
+            method: "GET"
+        }
+        ).then(response => response.json());
+        return response.xch;
+    } catch (error) {
+        console.log('Error in fetchXCHBalance: ' + error);
+    }
+    return 'NA';
 }
 async function fetchXCH(xchurl: string): Promise<string> {
     let response: XCH;
@@ -87,10 +108,13 @@ async function fetchXCH(xchurl: string): Promise<string> {
     }
     if (fetcherror) {
         try {
-            response = await fetch('https://dig.semaphoreslim.net/.well-known', {
+            console.log('Retrying with ' + xchurl.replace('https://', 'http://'))
+            response = await fetch(xchurl.replace('https://', 'http://'), {
                 method: "GET"
             }
             ).then(response => response.json());
+            storeurl = storeurl.replace('https://', 'http://');
+            amisecure = false;
             return response.xch_address;
         } catch (error) {
             console.log('caught 2nd error in fetchXCH: ' + error);
@@ -113,7 +137,6 @@ async function fetchStores(): Promise<[StoreData[]]> {
 
     const dnsdata = dnsresponse.Answer;
     let useXCHAddress: boolean = false;
-    let storeurl: string = '';
     const publicIP = await publicIpv4();
 
     if (Array.isArray(dnsdata)) {
@@ -135,15 +158,21 @@ async function fetchStores(): Promise<[StoreData[]]> {
     }
     else
     {
-        storeurl = 'https://' + hostname;
-        amisecure = true;
+        storeurl = 'http://' + hostname + ':4161';
+        amisecure = false;
     }
 
     if (useXCHAddress) {
+        console.log('Getting XCH address with ' + storeurl + '/.well-known');
         myXCH = await fetchXCH(storeurl + "/.well-known");
+        if (myXCH.length > 0 && myXCH != 'XCH Address') {
+            myBalance = await fetchXCHBalance()
+        }
     }
+
     const dict: StoreData[] = [];
     try {
+        console.log('Getting index with ' + storeurl);
         const indexresponse = await fetch(storeurl);
         const indexdata = await indexresponse.text();
         const parser = new DOMParser();
@@ -311,16 +340,36 @@ const StoreList: React.FC = () => {
     }, []);
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.value == '') {
+        let refreshed: boolean = false;
+        async function getbalance() {
+            myBalance = await fetchXCHBalance();
+            setData((prevstate) => ({ ...prevstate, loading: false }));
+        }
+        if (event.target.value.trim() == '') {
             myXCH = '';
             myPuzzleHash = '';
+            myBalance = 'NA';
         } else {
-            myXCH = event.target.value;
+            myXCH = event.target.value.trim();
             myPuzzleHash = addresstoPuzzleHash(myXCH);
+            myBalance = 'Loading...'
         }
+        //if (myXCH.length > 0 && myXCH != 'XCH Address') {
+        //    myBalance = 'Loading...'
+        //}
         if (myStoreID.length > 0) {
-            HandleClick(myStoreID, false, false, true);
-        } else {
+            //HandleClick(myStoreID, false, false, true);
+            HandleClick(myStoreID, false, true, false);
+            refreshed = true;
+        }
+        //else {
+        //    setData((prevstate) => ({ ...prevstate, loading: false }));
+        //}
+        if (myXCH.length > 0 && myXCH != 'XCH Address' && myXCH != '') {
+            getbalance();
+            refreshed = true;
+        }
+        if (!refreshed) {
             setData((prevstate) => ({ ...prevstate, loading: false }));
         }
     }
@@ -334,7 +383,8 @@ const StoreList: React.FC = () => {
         setEpochStartandEnd(epochSelection);
         if (myStoreID.length > 0) {
             setData((prevstate) => ({ ...prevstate, loading: true }));
-            HandleClick(myStoreID, true, true, false);
+            //HandleClick(myStoreID, true, true, false);
+            HandleClick(myStoreID, false, true, false);
         }
     }
 
@@ -399,14 +449,13 @@ const StoreList: React.FC = () => {
             }
             const blankResponse: apiResponse = {} as apiResponse;
             let mydata: apiResponse = blankResponse;
-            if (!sumsonly && !forceupdate) {
+            if ((!sumsonly && !forceupdate) || initialLoad) {
                 const storearray: Buffer = Buffer.from(storeId, 'hex');
                 if (!Buffer.isBuffer(storearray) || storearray.length !== 32) {
                     throw new Error("Invalid input. Must be a 32-byte buffer.");
                 }
                 const seed = "digpayment";
                 const combinedBuffer = Buffer.concat([Buffer.from(seed), storearray]);
-
                 let hashHex: string = '';
                 try {
                     if (!amisecure) {
@@ -425,6 +474,9 @@ const StoreList: React.FC = () => {
             } else {
                 mydata.coin_records = data.users;
             }
+            //if (updatewallet && myXCH.length > 0 && myXCH != 'XCH Address') {
+            //    myBalance = await fetchXCHBalance();
+            //}
             let tempsum = 0;
             let tempmysum = 0;
             if (Array.isArray(mydata.coin_records)) {
@@ -481,7 +533,6 @@ const StoreList: React.FC = () => {
         }
     }, [data.users]);
 
-
     const blank: StoreData[] = []
     const [test, setTest] = useState({
         loading: false,
@@ -517,7 +568,8 @@ const StoreList: React.FC = () => {
     if (deepStoreID && initialLoad) {
         myStoreID = deepStoreID;
         setData((prevstate) => ({ ...prevstate, loading: true }));
-        HandleClick(deepStoreID, true, false, false);
+        //HandleClick(deepStoreID, true, false, false);
+        HandleClick(deepStoreID, false, false, true);
         initialLoad = false;
     }
 
@@ -554,7 +606,7 @@ const StoreList: React.FC = () => {
                                 </tr>
                                 <tr>
                                     <td>
-                                        <br />
+                                        Wallet Balance: {myBalance}
                                     </td>
                                 </tr>
                                 <tr>
@@ -645,11 +697,11 @@ const StoreList: React.FC = () => {
                                                                 <tr key={i}>
                                                                     <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
                                                                     <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash), 5)}</a>&nbsp;&nbsp;
-                                                                        <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
-                                                                            <a style={{ cursor: 'pointer' }} >
-                                                                                <img width="15" height="15" src={imgUrl} />
-                                                                            </a>
-                                                                        </CopyToClipboard>
+                                                                        {/*<CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>*/}
+                                                                        {/*    <a style={{ cursor: 'pointer' }} >*/}
+                                                                        {/*        <img width="15" height="15" src={imgUrl} />*/}
+                                                                        {/*    </a>*/}
+                                                                        {/*</CopyToClipboard>*/}
                                                                     </td>
                                                                     <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
                                                                 </tr>
@@ -735,6 +787,8 @@ const StoreList: React.FC = () => {
                                     Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
                                     <br /><br />
                                     <input type="text" id='XCH_Address' value={(myXCH == 'XCH Address' ? '' : myXCH)} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
+                                    <br/>
+                                    Wallet Balance: {myBalance}
                                 </td>
                                 <td align="center">
                                     <table border={1} align="center">
