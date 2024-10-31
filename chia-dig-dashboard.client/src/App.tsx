@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+
 import { Buffer } from 'buffer';
 import './App.css';
 import React, { useState, useEffect, useCallback } from 'react';
@@ -7,13 +9,14 @@ import { bech32m } from 'bech32';
 import * as CryptoJS from 'crypto-js';
 import { useSearchParams } from 'react-router-dom';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
+import localforage from 'localforage';
 import imgUrl from '/images/clipboard.png'
+import Tooltip from './Tooltip';
 
 let myXCH: string = 'XCH Address';
 let myPuzzleHash: string = '';
 const mojo: number = .000000000001;
 let myStoreID: string = '';
-
 let myInterval: NodeJS.Timeout;
 let myIntervalRunning: boolean = false;
 let myStart: number = 0;
@@ -28,10 +31,12 @@ let endepoch: number = 0;
 let epochSelection: string = 'All';
 let myrecordSelection: number = 10;
 let allrecordSelection: number = 10;
-//const mobilemaxlength: number = 20;
 let recordoptions: number[] = [10, 25, 50, 100];
 let storeurl: string = '';
 let myBalance: string = 'NA';
+let xchPrice: number = 0;
+const xchCoinID: string = '9258';
+
 interface apiResponse {
     coin_records: Records;
 }
@@ -50,6 +55,22 @@ interface Records {
     }[];
 };
 
+interface PriceData {
+    data: {
+        [mysymbol: string]: {
+            id: number;
+            name: string;
+            symbol: string;
+            quote: {
+                USD: {
+                    price: number;
+                    volume_24h: number;
+                    percent_change_24h: number;
+                };
+            };
+        };
+    };
+}
 interface myDNS {
     Answer: {
         name: string;
@@ -79,63 +100,186 @@ interface StoreInfo {
     contentlength: string;
 }
 
-async function fetchXCHBalance(): Promise<string> {
-    let response: Balance = {} as Balance;
+async function getCache(cacheKey: string, validationKey: string, validationTime: number): Promise<unknown> {
+    let cachedResponse = null;
+    let clearcache = false;
     try {
-        response = await fetch('https://xchscan.com/api/account/balance?address=' + myXCH, {
-            method: "GET"
+        cachedResponse = await localforage.getItem(cacheKey);
+        if (cachedResponse) {
+            const validationResponse = await localforage.getItem(validationKey);
+            if (validationResponse && ((new Date().getTime()) - ((validationResponse as Date).getTime())) < validationTime) {
+                console.log('Using Cache for ' + validationKey + ' - Time diff: ' + (new Date().getTime() - (validationResponse as Date).getTime()));
+                //return cachedResponse;
+            } else {
+                console.log('Clearing Cache for ' + validationKey + ' - Time diff: ' + (new Date().getTime() - (validationResponse as Date).getTime()));
+                localforage.removeItem(cacheKey);
+                localforage.removeItem(validationKey);
+                cachedResponse = null;
+            }
+        }
+    } catch (error) {
+        console.log('Error getting cache for ' + validationKey + ': ' + error);
+        cachedResponse = null;
+        clearcache = true;
+    }
+    if (clearcache) {
+        try {
+            localforage.removeItem(cacheKey);
+        } catch (error) {
+            console.log('Error clearing cacheKey ' + cacheKey + ': ' + error);
+        }
+        try {
+            localforage.removeItem(validationKey);
+        } catch (error) {
+            console.log('Error clearing validationKey ' + validationKey + ': ' + error);
+        }
+    }
+    return cachedResponse;
+}
+
+async function fetchXCHBalance(usecache: boolean): Promise<string> {
+    let response: Balance = {} as Balance;
+    const url = 'https://api.coinset.org/get_coin_records_by_hint' + myXCH;
+    const cacheKey = url;
+    const validationKey = myXCH;
+    if (usecache) {
+        const payouts = await getCache(cacheKey, validationKey, 299000) as string
+        if (payouts && payouts != null) {
+            return payouts;
+        }
+    }
+    try {
+        response = await window.fetch('https://xchscan.com/api/account/balance?address=' + myXCH, {
+            method: "GET",
         }
         ).then(response => response.json());
+        try {
+            await localforage.setItem(cacheKey, response.xch);
+            await localforage.setItem(validationKey, new Date())
+        } catch (error) {
+            console.log('Error clearing cache in fetchXCHBalance: ' + error);
+        }
         return response.xch;
     } catch (error) {
         console.log('Error in fetchXCHBalance: ' + error);
     }
     return 'NA';
 }
-async function fetchXCH(xchurl: string): Promise<string> {
-    let response: XCH;
-    let fetcherror: boolean = false;
-    console.log('My xchurl: ' + xchurl);
+
+//Add SWR
+async function fetchXCHPrice(usecache: boolean): Promise<number> {
+    let response: PriceData = {} as PriceData;
+    const url = 'https://semaphoreslim.online/cryptocurrency/quotes/latest?id=9258&convert=USD';
+    const cacheKey = url;
+    const validationKey = 'XCH';
+    if (usecache) {
+        const xchprice = await getCache(cacheKey, validationKey, 299000) as number
+        if (xchprice && xchprice != null) {
+            return xchprice;
+        }
+    }
     try {
-        response = await fetch(xchurl, {
-            method: "GET"
+        response = await window.fetch(url, {
+            method: "GET",
         }
         ).then(response => response.json());
-        return response.xch_address;
+        try {
+            await localforage.setItem(cacheKey, response.data[xchCoinID].quote.USD.price);
+            await localforage.setItem(validationKey, new Date())
+        } catch (error) {
+            console.log('Error setting cache in fetchXCHPrice: ' + error);
+        }
+        return response.data[xchCoinID].quote.USD.price;
+    } catch (error) {
+        console.log('Error in fetchXCHPrice: ' + error);
+    }
+    return 0;
+}
+
+//Add SWR
+async function fetchXCH(xchurl: string, usecache: boolean): Promise<string> {
+    let response: XCH = { xch_address: 'XCH Address' };
+    let fetcherror: boolean = false;
+    const cacheKey = xchurl;
+    const validationKey = 'XCH_Address';
+    if (usecache) {
+        const xchaddress = await getCache(cacheKey, validationKey, 1800000) as string
+        if (xchaddress && xchaddress != null) {
+            return xchaddress;
+        }
+    }
+    try {
+        response = await window.fetch(xchurl, {
+            method: "GET",
+        }
+        ).then(response => response.json());
+        try {
+            await localforage.setItem(cacheKey, response.xch_address);
+            await localforage.setItem(validationKey, new Date())
+        } catch (error) {
+            console.log('Error setting cache in fetchXCH: ' + error);
+        }
+        myPuzzleHash = addresstoPuzzleHash(response.xch_address);
     } catch (error) {
         console.log('caught error in fetchXCH: ' + error)
         fetcherror = true;
     }
+    
     if (fetcherror) {
+        if (usecache) {
+            const xchaddress = await getCache(cacheKey.replace('https://', 'http://'), validationKey, 1800000) as string
+            if (xchaddress && xchaddress != null) {
+                return xchaddress;
+            }
+        }
         try {
-            console.log('Retrying with ' + xchurl.replace('https://', 'http://'))
-            response = await fetch(xchurl.replace('https://', 'http://'), {
-                method: "GET"
+            //console.log('Retrying with ' + xchurl.replace('https://', 'http://'))
+            response = await window.fetch(xchurl.replace('https://', 'http://'), {
+                method: "GET",
             }
             ).then(response => response.json());
             storeurl = storeurl.replace('https://', 'http://');
+            try {
+                await localforage.setItem(storeurl, response.xch_address);
+                await localforage.setItem(validationKey, new Date())
+            } catch (error) {
+                console.log('Error setting cache in fetchXCH: ' + error);
+            }
             amisecure = false;
-            return response.xch_address;
+            myPuzzleHash = addresstoPuzzleHash(response.xch_address);
         } catch (error) {
             console.log('caught 2nd error in fetchXCH: ' + error);
-            return 'XCH Address';
         }
     }
-    return 'XCH Address';
+    return response.xch_address;
 }
 
-async function fetchStores(): Promise<[StoreData[]]> {
+async function fetchStores(usecache: boolean): Promise<[StoreData[]]> {
     let hostname = window.location.hostname;
 
     if (hostname == 'localhost') {
         hostname = 'dig.semaphoreslim.net';
     }
-
-    const dnsresponse: myDNS = await fetch('https://dns.google/resolve?name=' + hostname, {
-        method: "GET"
-    }).then(dnsresponse => dnsresponse.json());
-
-    const dnsdata = dnsresponse.Answer;
+    let dnsdata = null;
+    const url = 'https://dns.google/resolve?name=' + hostname;
+    let cacheKey = url;
+    let validationKey = hostname;
+    if (usecache) {
+        dnsdata = await getCache(cacheKey, validationKey, 299000)
+    }
+    if (!dnsdata || dnsdata == null) {
+        const dnsresponse: myDNS = await window.fetch(url, {
+            method: "GET",
+        }).then(dnsresponse => dnsresponse.json());
+        try {
+            await localforage.setItem(url, dnsresponse.Answer);
+            await localforage.setItem(validationKey, new Date())
+        } catch (error) {
+            console.log('Error setting cache in fetchXCH: ' + error);
+        }
+        dnsdata = dnsresponse.Answer;
+    }
+    
     let useXCHAddress: boolean = false;
     const publicIP = await publicIpv4();
 
@@ -163,18 +307,42 @@ async function fetchStores(): Promise<[StoreData[]]> {
     }
 
     if (useXCHAddress) {
-        console.log('Getting XCH address with ' + storeurl + '/.well-known');
-        myXCH = await fetchXCH(storeurl + "/.well-known");
+        myXCH = await fetchXCH(storeurl + "/.well-known", true);
         if (myXCH.length > 0 && myXCH != 'XCH Address') {
-            myBalance = await fetchXCHBalance()
+            myBalance = await fetchXCHBalance(true)
+            console.log('XCH wallet balance is ' + myBalance);
         }
     }
 
+    xchPrice = await fetchXCHPrice(false);
+    console.log('xch Price is ' + xchPrice);
+
     const dict: StoreData[] = [];
+    let indexdata: string = '';
+    cacheKey = storeurl;
+    validationKey = "indexofstores";
     try {
-        console.log('Getting index with ' + storeurl);
-        const indexresponse = await fetch(storeurl);
-        const indexdata = await indexresponse.text();
+        //console.log('Getting index with ' + storeurl);
+        if (usecache) {
+            try {
+                indexdata = await getCache(cacheKey, validationKey, 299000) as string;
+            }
+            catch (error) {
+                console.log('Error getting cache for indexofstore: ' + error);
+            }
+        }
+        if (!indexdata || indexdata == null) {
+            const indexresponse = await window.fetch(storeurl, {
+                method: "GET",
+            });
+            indexdata = await indexresponse.text();
+            try {
+                await localforage.setItem(storeurl, indexdata);
+                await localforage.setItem(validationKey, new Date())
+            } catch (error) {
+                console.log('Error setting cache in fetchXCH: ' + error);
+            }
+        }
         const parser = new DOMParser();
         const doc = parser.parseFromString(indexdata, "text/html");
         const pees = Array.from(doc.querySelectorAll('p'));
@@ -212,49 +380,35 @@ async function fetchStores(): Promise<[StoreData[]]> {
     return [dict];
 }
 
-async function fetchUsers(hint: string): Promise<apiResponse> {
-    const response = await fetch('https://api.coinset.org/get_coin_records_by_hint', {
+async function fetchUsers(hint: string, usecache: boolean): Promise<apiResponse> {
+    const bodystr = JSON.stringify({
+        "hint": hint,
+        "start_height": 0,
+        "end_height": 0,
+        "include_spent_coins": true
+    });
+    const url = 'https://api.coinset.org/get_coin_records_by_hint';
+    const cacheKey = url + '-' + bodystr;
+    const validationKey = hint;
+    if (usecache) {
+        const payouts = await getCache(cacheKey, validationKey, 900000) as apiResponse;
+        if (payouts && payouts != null) {
+            return payouts;
+        }
+    }
+    const response = await window.fetch(url, {
         method: 'POST',
-        body: JSON.stringify({
-            "hint": hint,
-            "start_height": 0,
-            "end_height": 0,
-            "include_spent_coins": true
-        })
+        body: bodystr,
     });
     const data: apiResponse = await response.json();
+    try {
+        await localforage.setItem(cacheKey, data);
+        await localforage.setItem(validationKey, new Date())
+    } catch (error) {
+        console.log('Error setting cache items in fetchUsers: ' + error);
+    }
     return data;
 }
-
-//interface Props {
-//    label: string;
-//}
-
-//function calculateEpochAndRound(): { epoch: number; round: number; } {
-//    const firstEpochStart = new Date(Date.UTC(2024, 8, 3, 0, 0));
-
-//    const currentTimestampMillis = new Date().getTime();
-
-//    // Calculate the number of milliseconds in one epoch (7 days)
-//    const millisecondsInEpoch = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-
-//    // Calculate the difference in milliseconds between the current timestamp and the first epoch start
-//    const differenceMillis = currentTimestampMillis - firstEpochStart.getTime();
-
-//    // Calculate the current epoch number
-//    const epochNumber = Math.floor(differenceMillis / millisecondsInEpoch) + 1;
-
-//    // Calculate the milliseconds elapsed since the start of the current epoch
-//    const elapsedMillisInCurrentEpoch = differenceMillis % millisecondsInEpoch;
-
-//    // Calculate the number of milliseconds in a round (10 minutes)
-//    const millisecondsInRound = 10 * 60 * 1000; // 10 minutes in milliseconds
-
-//    // Calculate the current round number
-//    const roundNumber = Math.floor(elapsedMillisInCurrentEpoch / millisecondsInRound) + 1;
-
-//    return { epoch: epochNumber, round: roundNumber };
-//}
 
 function setEpochStartandEnd(epoch: string) {
     // Calculate the number of milliseconds in one epoch (7 days)
@@ -270,6 +424,10 @@ function setEpochStartandEnd(epoch: string) {
 
 const StoreList: React.FC = () => {
     const isMobile = useMediaQuery({ query: '(max-width: 768px)' });
+
+    const [searchParams] = useSearchParams();
+
+    const deepStoreID = searchParams.get('storeid');
 
     const currentTimestampMillis = new Date().getTime();
     console.log('Rendering');
@@ -298,12 +456,7 @@ const StoreList: React.FC = () => {
         strepochs.push(epoch.toString());
     }
 
-    //const [value, setValue] = useState('');
-    //label = 'XCH Address: ';
-
-    const [searchParams] = useSearchParams();
-
-    const deepStoreID = searchParams.get('storeid');
+    
 
     const HandleNext = useCallback(() => {
         allStart = allStart + allrecordSelection;
@@ -342,10 +495,12 @@ const StoreList: React.FC = () => {
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         let refreshed: boolean = false;
         async function getbalance() {
-            myBalance = await fetchXCHBalance();
+            myBalance = await fetchXCHBalance(false);
+            console.log('XCH wallet balance is ' + myBalance);
             setData((prevstate) => ({ ...prevstate, loading: false }));
         }
         if (event.target.value.trim() == '') {
+            console.log('reset myXCH');
             myXCH = '';
             myPuzzleHash = '';
             myBalance = 'NA';
@@ -470,13 +625,14 @@ const StoreList: React.FC = () => {
                 catch (err) {
                     console.log('Error in gethint: ' + (err as Error).message);
                 }
-                mydata = await fetchUsers(hashHex);
+                mydata = await fetchUsers(hashHex, (isTimer ? false : true));
             } else {
                 mydata.coin_records = data.users;
             }
-            //if (updatewallet && myXCH.length > 0 && myXCH != 'XCH Address') {
-            //    myBalance = await fetchXCHBalance();
-            //}
+            if (isTimer) {
+                myBalance = await fetchXCHBalance(false);
+                console.log('XCH wallet balance is ' + myBalance);
+            }
             let tempsum = 0;
             let tempmysum = 0;
             if (Array.isArray(mydata.coin_records)) {
@@ -500,10 +656,16 @@ const StoreList: React.FC = () => {
                     }, 0);
                     tempmysum = (total * mojo);
                 } else {
+                    console.log('No puzzlehash found - ' + myXCH);
                     tempmysum = 0;
                 }
                 setData({ users: mydata.coin_records, sum: tempsum, mysum: tempmysum, loading: false })
             }
+        }
+
+        async function getPrice(usecache: boolean) {
+            xchPrice = await fetchXCHPrice(usecache);
+            console.log('xch Price is ' + xchPrice);
         }
 
         if (!myIntervalRunning) {
@@ -523,6 +685,9 @@ const StoreList: React.FC = () => {
             console.log('Running getHint');
             myStoreID = storeId;
             getHint();
+            if (isTimer) {
+                getPrice(false);
+            }
         }
         else {
             console.log('Disabling interval');
@@ -541,37 +706,45 @@ const StoreList: React.FC = () => {
 
     useEffect(() => {
         async function fetchData() {
-            const blank: StoreData[] = [];
             try {
-                setTest({ loading: true, users: blank })
-                const [dict] = await fetchStores();
+                console.log('Fetching stores...');
+                setTest((prevstate) => ({ ...prevstate, loading: true }));
+                //setTest({ loading: true, users: blank })
+                const [dict] = await fetchStores(true);
                 setTest({ loading: false, users: dict });
             } catch (error) {
                 console.log('Error in fetchData: ' + error);
             }
+            console.log('Done fetching stores.');
+
+            if (myXCH != 'XCH Address' && myXCH.length > 0) {
+                myPuzzleHash = addresstoPuzzleHash(myXCH);
+            }
+
+            if (deepStoreID && initialLoad) {
+                myStoreID = deepStoreID;
+                console.log('Found deepStoreID');
+                setData((prevstate) => ({ ...prevstate, loading: true }));
+                HandleClick(deepStoreID, false, false, true);
+            }
+
+            if (isMobile && initialLoad) {
+                recordoptions = [5, 10, 25, 50, 100];
+                myrecordSelection = 5;
+                allrecordSelection = 5;
+                myEnd = 5;
+                allEnd = 5;
+            }
+            initialLoad = false;
         }
         fetchData();
-    }, []);
-
-    if (myXCH != 'XCH Address' && myXCH.length > 0) {
-        myPuzzleHash = addresstoPuzzleHash(myXCH);
-    }
-
-    if (isMobile && initialLoad) {
-        recordoptions = [5, 10, 25, 50, 100];
-        myrecordSelection = 5;
-        allrecordSelection = 5;
-        myEnd = 5;
-        allEnd = 5;
-    }
-
-    if (deepStoreID && initialLoad) {
-        myStoreID = deepStoreID;
-        setData((prevstate) => ({ ...prevstate, loading: true }));
-        //HandleClick(deepStoreID, true, false, false);
-        HandleClick(deepStoreID, false, false, true);
+        
+    }, [deepStoreID, isMobile]);
+    
+    if (!deepStoreID && !isMobile) {
         initialLoad = false;
     }
+    
 
     function truncForMobile(str: string, maxsize: number) {
         if (str.length > maxsize) {
@@ -585,7 +758,16 @@ const StoreList: React.FC = () => {
         }
     }
 
-    initialLoad = false;
+    function USDCalc(str: string) {
+        const strtonum: number = Number(str);
+        if (!isNaN(strtonum)) {
+            return '$' + (strtonum * xchPrice).toFixed(2).toString();
+        } else {
+            return '0';
+        }
+    }
+
+    
 
     if (test.loading) {
         return <p>Loading stores...</p>
@@ -606,7 +788,9 @@ const StoreList: React.FC = () => {
                                 </tr>
                                 <tr>
                                     <td>
-                                        Wallet Balance: {myBalance}
+                                        <Tooltip content={USDCalc(myBalance)} location='top'>
+                                            Wallet Balance: {myBalance}
+                                        </Tooltip>
                                     </td>
                                 </tr>
                                 <tr>
@@ -668,6 +852,9 @@ const StoreList: React.FC = () => {
                                     <table align="right" width="100%">
                                         <tbody>
                                             <tr>
+                                                <td align="left">
+                                                    XCH Price: ${xchPrice.toFixed(2)}
+                                                </td>
                                                 <td align="right">
                                                     Selected Epoch(s):&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                                                     <select onChange={handleEpochChange}>
@@ -685,7 +872,13 @@ const StoreList: React.FC = () => {
                                         <tbody>
                                             <tr>
                                                 <td width="100%">
-                                                    <h2 key={myStoreID}>Your Payments<br />({Array.isArray(data.users) ? data.mysum : 0})</h2>
+                                                    <h2 key={myStoreID}>Your Payments<br />
+                                                        ({Array.isArray(data.users) ?
+                                                            <Tooltip content={USDCalc(data.mysum.toString())} location='top'>
+                                                                {data.mysum}
+                                                            </Tooltip>
+                                                        : 0})
+                                                    </h2>
                                                     <table border={1} align="center">
                                                         <tbody>
                                                             <tr key='amount'>
@@ -695,13 +888,12 @@ const StoreList: React.FC = () => {
                                                             </tr>
                                                             {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash && addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(myStart, myEnd).map((store, i) => (
                                                                 <tr key={i}>
-                                                                    <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
+                                                                    <td style={{ padding: '5px' }}>
+                                                                        <Tooltip content={USDCalc((store.coin?.amount * mojo).toString())} location='right'>
+                                                                            {(store.coin?.amount * mojo).toFixed(8)}
+                                                                        </Tooltip>
+                                                                    </td>
                                                                     <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash), 5)}</a>&nbsp;&nbsp;
-                                                                        {/*<CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>*/}
-                                                                        {/*    <a style={{ cursor: 'pointer' }} >*/}
-                                                                        {/*        <img width="15" height="15" src={imgUrl} />*/}
-                                                                        {/*    </a>*/}
-                                                                        {/*</CopyToClipboard>*/}
                                                                     </td>
                                                                     <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
                                                                 </tr>
@@ -729,7 +921,13 @@ const StoreList: React.FC = () => {
                                             </tr>
                                             <tr>
                                                 <td width="100%">
-                                                    <h2 key={myStoreID}>All Payments<br/>({Array.isArray(data.users) ? data.sum : 0})</h2>
+                                                    <h2 key={myStoreID}>All Payments<br />
+                                                        ({Array.isArray(data.users) ?
+                                                            <Tooltip content={USDCalc(data.sum.toString())} location='top'>
+                                                                {data.sum}
+                                                            </Tooltip>
+                                                            : 0})
+                                                    </h2>
                                                     <table border={1} align="center">
                                                         <tbody>
                                                             <tr key='amount'>
@@ -739,7 +937,11 @@ const StoreList: React.FC = () => {
                                                             </tr>
                                                             {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
                                                                 <tr key={i}>
-                                                                    <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
+                                                                    <td style={{ padding: '5px' }}>
+                                                                        <Tooltip content={USDCalc((store.coin?.amount * mojo).toString())} location='right'>
+                                                                            {(store.coin?.amount * mojo).toFixed(8)}
+                                                                        </Tooltip>
+                                                                    </td>
                                                                     <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{truncForMobile(puzzleHashToAddress(store.coin?.puzzle_hash), 5)}</a>&nbsp;&nbsp;
                                                                         <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
                                                                             <a style={{ cursor: 'pointer' }} >
@@ -787,8 +989,10 @@ const StoreList: React.FC = () => {
                                     Enter your DIG Node XCH address in the space provided<br />then click a store ID to view incentive payouts for the store
                                     <br /><br />
                                     <input type="text" id='XCH_Address' value={(myXCH == 'XCH Address' ? '' : myXCH)} placeholder={myXCH} onChange={handleChange} style={{ width: '450px' }} />
-                                    <br/>
-                                    Wallet Balance: {myBalance}
+                                    <br />
+                                        <Tooltip content={USDCalc(myBalance)} location='bottom'>
+                                        Wallet Balance: {myBalance}
+                                    </Tooltip>
                                 </td>
                                 <td align="center">
                                     <table border={1} align="center">
@@ -849,6 +1053,9 @@ const StoreList: React.FC = () => {
                                 <table align="right" width="100%">
                                     <tbody>
                                         <tr>
+                                            <td align="left">
+                                                XCH Price: ${xchPrice.toFixed(2)}
+                                            </td>
                                             <td align="right">
                                                 Selected Epoch(s):&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                                                 <select onChange={handleEpochChange}>
@@ -866,7 +1073,13 @@ const StoreList: React.FC = () => {
                                     <tbody>
                                         <tr>
                                             <td width="50%">
-                                                <h2 key={myStoreID}>All Payments ({Array.isArray(data.users) ? data.sum : 0})</h2>
+                                                        <h2 key={myStoreID}>All Payments<br />
+                                                            ({Array.isArray(data.users) ?
+                                                                <Tooltip content={USDCalc(data.sum.toString())} location='bottom'>
+                                                                    {data.sum}
+                                                                </Tooltip>
+                                                                : 0})
+                                                        </h2>
                                                 <table border={1} align="center">
                                                     <tbody>
                                                         <tr key='amount'>
@@ -876,7 +1089,11 @@ const StoreList: React.FC = () => {
                                                         </tr>
                                                         {data.users.filter(addy => addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(allStart, allEnd).map((store, i) => (
                                                             <tr key={i}>
-                                                                <td style={{ padding: '5px' }}>{((store.coin?.amount) * mojo).toFixed(8)}</td>
+                                                                <td style={{ padding: '5px' }}>
+                                                                    <Tooltip content={USDCalc((store.coin?.amount * mojo).toString())} location='right'>
+                                                                        {(store.coin?.amount * mojo).toFixed(8)}
+                                                                    </Tooltip>
+                                                                </td>
                                                                 <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a>&nbsp;&nbsp;
                                                                     <CopyToClipboard text={puzzleHashToAddress(store.coin?.puzzle_hash)}>
                                                                         <a style={{ cursor: 'pointer' }} >
@@ -908,7 +1125,13 @@ const StoreList: React.FC = () => {
                                                 </table>
                                             </td>
                                             <td width="50%">
-                                                <h2 key={myStoreID}>Your Payments ({Array.isArray(data.users) ? data.mysum : 0})</h2>
+                                                <h2 key={myStoreID}>Your Payments<br />
+                                                    ({Array.isArray(data.users) ?
+                                                            <Tooltip content={USDCalc(data.mysum.toString())} location='bottom'>
+                                                            {data.mysum}
+                                                        </Tooltip>
+                                                    : 0})
+                                                </h2>
                                                 <table border={1} align="center">
                                                     <tbody>
                                                         <tr key='amount'>
@@ -918,7 +1141,11 @@ const StoreList: React.FC = () => {
                                                         </tr>
                                                         {myPuzzleHash && data.users.filter(addy => addy.coin?.puzzle_hash === myPuzzleHash && addy.timestamp >= startepoch && addy.timestamp <= endepoch).sort((a, b) => b.timestamp - a.timestamp).slice(myStart, myEnd).map((store, i) => (
                                                             <tr key={i}>
-                                                                <td style={{ padding: '5px' }}>{(store.coin?.amount * .000000000001).toFixed(8)}</td>
+                                                                <td style={{ padding: '5px' }}>
+                                                                    <Tooltip content={USDCalc((store.coin?.amount * mojo).toString())} location='right'>
+                                                                        {(store.coin?.amount * mojo).toFixed(8)}
+                                                                    </Tooltip>
+                                                                </td>
                                                                 <td style={{ padding: '5px' }}><a onClick={() => NewTab(store.coin?.puzzle_hash)} style={{ cursor: 'pointer' }}>{puzzleHashToAddress(store.coin?.puzzle_hash)}</a></td>
                                                                 <td style={{ padding: '5px' }}>{(new Date(store.timestamp * 1000)).toLocaleString()}</td>
                                                             </tr>
